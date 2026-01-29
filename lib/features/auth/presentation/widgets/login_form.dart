@@ -1,6 +1,3 @@
-
-
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -150,19 +147,13 @@ class _LoginFormState extends State<LoginForm> {
                       offstage: true,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 24),
-                      child: Image.memory(
-                          base64Decode(
-                            'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBwgHBgkIBwgKCgkLDRYPDQwMDRsUFRAWIB0iIiAdHx8kKDQsJCYxJx8fLT0tMTU3Ojo6Iys/RD84QzQ5OjcBCgoKDQwNGg8PGjclHyU3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3N//AABEIAJQBDgMBEQACEQEDEQH/...'
-                                .split(',')
-                                .last,
-                          ),
+                        child: SizedBox(
                           width: isTablet ? 150 : 110,
                           height: isTablet ? 150 : 110,
-                          fit: BoxFit.contain,
-                        )
-
+                        ),
+                      ),
                     ),
-                  ),
+                 
 
                     /// Message d'erreur
                     if (_errorMessage != null)
@@ -191,29 +182,28 @@ class _LoginFormState extends State<LoginForm> {
 
                     /// Champ Mot de passe
                     TextFormField(
-                    controller: _passwordCtrl,
-                    obscureText: !_isPasswordVisible,
-                    keyboardType: TextInputType.visiblePassword,
-                    decoration: InputDecoration(
-                      labelText: "Mot de passe",
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _isPasswordVisible
-                              ? Icons.visibility
-                              : Icons.visibility_off,
+                      controller: _passwordCtrl,
+                      obscureText: !_isPasswordVisible,
+                      keyboardType: TextInputType.visiblePassword,
+                      decoration: InputDecoration(
+                        labelText: "Mot de passe",
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _isPasswordVisible = !_isPasswordVisible;
-                          });
-                        },
                       ),
+                      validator: (value) =>
+                          value!.isEmpty ? "Champ obligatoire" : null,
                     ),
-                    validator: (value) =>
-                        value!.isEmpty ? "Champ obligatoire" : null,
-                  ),
-
 
                     const SizedBox(height: 24),
 

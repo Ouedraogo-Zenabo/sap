@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "580153289201",
+    "project_id": "sap-alert",
+    "storage_bucket": "sap-alert.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:580153289201:android:18c3df4026e9917d097c50",
+        "android_client_info": {
+          "package_name": "com.example.mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFTdMFFQQ7R92za_a3wewCoOR4lz6unT8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

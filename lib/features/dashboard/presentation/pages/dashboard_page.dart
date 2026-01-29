@@ -8,8 +8,6 @@ import 'package:mobile_app/features/alert/presentation/pages/alert_list_page.dar
 import 'package:mobile_app/features/alert/presentation/pages/create_alert.dart';
 import 'package:mobile_app/features/notification/notification_bell.dart';
 import 'package:mobile_app/features/notification/notification_provider.dart';
-
-
 import 'package:mobile_app/features/user/domain/user_repository.dart';
 import 'package:mobile_app/features/user/presentation/pages/profile_page.dart';
 import 'package:mobile_app/features/user/data/sources/user_local_service.dart';
@@ -20,6 +18,7 @@ import 'package:mobile_app/core/utils/http_error_helper.dart';
 import 'package:mobile_app/core/utils/auth_error_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class DashboardPage extends StatefulWidget {
   final UserRepository userRepository;
@@ -91,16 +90,31 @@ class _DashboardHomeState extends State<_DashboardHome> {
   bool loading = false;
   String? error;
   List<dynamic> alerts = [];
-  int pendingAlertsCount = 0; // Nombre d'alertes hors-ligne en attente
-
+  int pendingAlertsCount = 0;
   String? currentUserId;
+  
+  // Pour les notifications
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  List<String> _previousAlertIds = [];
 
   @override
   void initState() {
     super.initState();
+    _initializeNotifications();
     _loadCurrentUser();
     _fetchAlerts();
     _loadPendingAlertsCount();
+  }
+
+  Future<void> _initializeNotifications() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+    await _localNotifications.initialize(
+      settings: initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        // Gérer le tap sur la notification
+      },
+    );
   }
 
   Future<void> _loadPendingAlertsCount() async {
@@ -179,7 +193,6 @@ class _DashboardHomeState extends State<_DashboardHome> {
     try {
       String? token = await _getToken();
       if (token == null || token.isEmpty) {
-        // Try to load cached alerts when token absent
         final prefs = await SharedPreferences.getInstance();
         final cached = prefs.getString('cached_alerts');
         if (cached != null && cached.isNotEmpty) {
@@ -218,7 +231,6 @@ class _DashboardHomeState extends State<_DashboardHome> {
           return;
         }
 
-        // fallback to cached alerts if available
         final prefs = await SharedPreferences.getInstance();
         final cached = prefs.getString('cached_alerts');
         if (cached != null && cached.isNotEmpty) {
@@ -249,12 +261,13 @@ class _DashboardHomeState extends State<_DashboardHome> {
         } else if (decoded['alerts'] is List) items = List<dynamic>.from(decoded['alerts']);
         else if (decoded['data'] is Map && decoded['data']['items'] is List) items = List<dynamic>.from(decoded['data']['items']);
         else if (decoded['data'] is Map && decoded['data']['items'] == null && decoded['data'].containsKey('total')) {
-          // sometimes data contains items under another key
           items = decoded['data']['items'] is List ? List<dynamic>.from(decoded['data']['items']) : [];
         }
       }
 
-      // Save cached alerts
+      // Vérifier les nouvelles alertes et afficher une notification
+      await _checkForNewAlerts(items);
+
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('cached_alerts', jsonEncode(items));
@@ -265,7 +278,6 @@ class _DashboardHomeState extends State<_DashboardHome> {
         loading = false;
       });
     } catch (e) {
-      // Try to fallback to cached alerts on network error
       try {
         final prefs = await SharedPreferences.getInstance();
         final cached = prefs.getString('cached_alerts');
@@ -284,6 +296,67 @@ class _DashboardHomeState extends State<_DashboardHome> {
         error = friendlyNetworkErrorMessage(e);
         loading = false;
       });
+    }
+  }
+
+  /// Vérifie s'il y a de nouvelles alertes et affiche une notification
+  Future<void> _checkForNewAlerts(List<dynamic> newAlerts) async {
+    for (var alert in newAlerts) {
+      final alertId = (alert['id'] ?? alert['_id'] ?? '').toString();
+      
+      if (alertId.isEmpty) continue;
+      
+      // Si c'est une nouvelle alerte (pas dans la liste précédente)
+      if (!_previousAlertIds.contains(alertId)) {
+        await _showNotificationForAlert(alert);
+      }
+    }
+    
+    // Mettre à jour la liste des IDs précédents
+    _previousAlertIds = newAlerts
+        .map((a) => (a['id'] ?? a['_id'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toList();
+  }
+
+  /// Affiche une notification locale pour une nouvelle alerte
+  Future<void> _showNotificationForAlert(dynamic alert) async {
+    final title = (alert['title'] ?? 'Nouvelle Alerte').toString();
+    final message = (alert['message'] ?? 'Une nouvelle alerte a été détectée').toString();
+    final severity = (alert['severity'] ?? '').toString().toUpperCase();
+    
+    // Déterminer la priorité selon la sévérité
+    Importance importance = Importance.defaultImportance;
+    Priority priority = Priority.defaultPriority;
+    
+    if (severity == 'HIGH' || severity == 'CRITICAL' || severity == 'EXTREME') {
+      importance = Importance.high;
+      priority = Priority.high;
+    } else if (severity == 'MEDIUM' || severity == 'MODERATE') {
+      importance = Importance.defaultImportance;
+      priority = Priority.defaultPriority;
+    }
+
+    final androidDetails = AndroidNotificationDetails(
+      'alerts',
+      'Alertes',
+      channelDescription: 'Notifications pour les alertes',
+      importance: importance,
+      priority: priority,
+      showWhen: true,
+    );
+
+    final notificationDetails = NotificationDetails(android: androidDetails);
+
+    try {
+      await _localNotifications.show(
+        id: alert.hashCode,
+        title: '🚨 $title',
+        body: message,
+        notificationDetails: notificationDetails,
+      );
+    } catch (e) {
+      debugPrint('Erreur affichage notification: $e');
     }
   }
 

@@ -13,7 +13,6 @@ import 'package:mime/mime.dart'; // optionnel mais utile
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 import 'package:mobile_app/core/network/connectivity_service.dart';
 import 'package:mobile_app/features/alert/data/sources/alert_local_service.dart';
@@ -777,8 +776,6 @@ Future<void> _pickTime({required bool isStart}) async {
       });
       if (!mounted) return;
 
-Navigator.pop(context, true);
-
       return;
     }
 
@@ -874,7 +871,7 @@ final url = isEdit
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
       form.removeWhere(
-  (key, value) => value == null || (value is String && value.trim().isEmpty),
+  (key, value) => (value is String && value.trim().isEmpty),
 );
 
 data.removeWhere(
@@ -928,7 +925,6 @@ if (response.statusCode == 200) {
   }
 
   if (mounted) Navigator.pop(context, true);
-    if (mounted) Navigator.pop(context, true);
       } else if (response.statusCode == 401 || response.statusCode == 403) {
         if (mounted) await showAuthExpiredDialog(context);
       } else {

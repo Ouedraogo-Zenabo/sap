@@ -6,6 +6,7 @@ class UserLocalService {
   static const String userKey = "user_profile";
   static const String accessTokenKey = "access_token";
   static const String refreshTokenKey = "refresh_token";
+  static const String fcmTokenKey = "fcm_token";
 
   /// Sauvegarde le profil utilisateur en cache
   Future<void> saveUser(UserModel user) async {
@@ -18,6 +19,18 @@ class UserLocalService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(accessTokenKey, accessToken);
     await prefs.setString(refreshTokenKey, refreshToken);
+  }
+
+  /// Sauvegarde le token FCM localement
+  Future<void> saveFcmToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(fcmTokenKey, token);
+  }
+
+  /// Supprime le token FCM localement
+  Future<void> removeFcmToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(fcmTokenKey);
   }
 
   /// Récupère l'access token

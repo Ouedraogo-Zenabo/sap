@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:mobile_app/services/push_notification_service.dart';
 import 'package:mobile_app/features/alert/presentation/pages/create_alert.dart';
 import 'package:mobile_app/features/notification/notification_provider.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +15,18 @@ import 'package:mobile_app/features/user/data/sources/user_local_service.dart';
 import 'package:mobile_app/features/user/domain/user_repository.dart';
   
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase and push service before app start
+  await Firebase.initializeApp();
+
+  // Register background handler
+  FirebaseMessaging.onBackgroundMessage(PushNotificationService.firebaseMessagingBackgroundHandler);
+
+  // Initialize push service (local notifications + token)
+  await PushNotificationService().initialize();
+
   // Initialisation des services User
   final apiService = UserApiService(
     baseUrl: "http://197.239.116.77:3000/api",
@@ -26,12 +40,11 @@ void main() {
   );
 
   runApp(
-  ChangeNotifierProvider(
-    create: (_) => NotificationProvider(),
-    child: MyApp(userRepository: userRepository),
-  ),
-);
-
+    ChangeNotifierProvider(
+      create: (_) => NotificationProvider(),
+      child: MyApp(userRepository: userRepository),
+    ),
+  );
 }
 
 class MyApp extends StatefulWidget {
