@@ -101,6 +101,7 @@ class _DashboardHomeState extends State<_DashboardHome> {
   void initState() {
     super.initState();
     _initializeNotifications();
+    _loadPreviousAlertIds();
     _loadCurrentUser();
     _fetchAlerts();
     _loadPendingAlertsCount();
@@ -125,6 +126,27 @@ class _DashboardHomeState extends State<_DashboardHome> {
       }
     } catch (e) {
       debugPrint('Erreur chargement count: $e');
+    }
+  }
+
+  Future<void> _loadPreviousAlertIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString('seen_alert_ids_dashboard');
+      if (stored != null && stored.isNotEmpty) {
+        _previousAlertIds = List<String>.from(jsonDecode(stored));
+      }
+    } catch (e) {
+      debugPrint('Erreur chargement alertes vues: $e');
+    }
+  }
+
+  Future<void> _savePreviousAlertIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('seen_alert_ids_dashboard', jsonEncode(_previousAlertIds));
+    } catch (e) {
+      debugPrint('Erreur sauvegarde alertes vues: $e');
     }
   }
 
@@ -309,14 +331,12 @@ class _DashboardHomeState extends State<_DashboardHome> {
       // Si c'est une nouvelle alerte (pas dans la liste précédente)
       if (!_previousAlertIds.contains(alertId)) {
         await _showNotificationForAlert(alert);
+        _previousAlertIds.add(alertId);
       }
     }
     
-    // Mettre à jour la liste des IDs précédents
-    _previousAlertIds = newAlerts
-        .map((a) => (a['id'] ?? a['_id'] ?? '').toString())
-        .where((id) => id.isNotEmpty)
-        .toList();
+    // Sauvegarder les IDs mis à jour
+    await _savePreviousAlertIds();
   }
 
   /// Affiche une notification locale pour une nouvelle alerte

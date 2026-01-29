@@ -13,19 +13,25 @@ import 'package:mobile_app/features/dashboard/presentation/pages/dashboard_page.
 import 'package:mobile_app/features/user/data/sources/user_api_service.dart';
 import 'package:mobile_app/features/user/data/sources/user_local_service.dart';
 import 'package:mobile_app/features/user/domain/user_repository.dart';
-  
+
+// Handler pour les messages en arrière-plan
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('🌙 Message reçu en arrière-plan: ${message.notification?.title}');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase and push service before app start
+  // Initialize Firebase
   await Firebase.initializeApp();
 
   // Register background handler
-  FirebaseMessaging.onBackgroundMessage(PushNotificationService.firebaseMessagingBackgroundHandler);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // Initialize push service (local notifications + token)
-  await PushNotificationService().initialize();
+  await PushNotificationService.initialize();
 
   // Initialisation des services User
   final apiService = UserApiService(
@@ -104,18 +110,15 @@ class _MyAppState extends State<MyApp> {
   }
 
   /// Démarre un Timer qui refresh le token toutes les 30 minutes
-  /// (refresh passif, seulement si la session est active)
   void _startTokenRefreshTimer() {
     _tokenRefreshTimer?.cancel();
     
-    // Refresh toutes les 30 minutes pour maintenir la session valide
     _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 30), (timer) async {
       await _refreshAccessToken();
     });
   }
 
   /// Appelle l'API pour refresh le token
-  /// ✅ La session persiste jusqu'à déconnexion manuelle
   Future<void> _refreshAccessToken() async {
     try {
       final refreshToken = await widget.userRepository.local.getRefreshToken();
@@ -125,10 +128,8 @@ class _MyAppState extends State<MyApp> {
         return;
       }
 
-      // Appeler l'API refresh
       final tokens = await widget.userRepository.api.refreshToken(refreshToken);
       
-      // Sauvegarder les nouveaux tokens
       await widget.userRepository.local.saveTokens(
         tokens['accessToken']!,
         tokens['refreshToken']!,
@@ -141,14 +142,11 @@ class _MyAppState extends State<MyApp> {
       debugPrint("✅ Token maintenu actif");
     } catch (e) {
       debugPrint("⚠️ Refresh token échoué: $e");
-      // On n'efface pas la session en cas d'erreur
-      // L'utilisateur reste connecté et peut retry
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Affiche un loader pendant la vérification
     if (_isLoading) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -164,7 +162,6 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       title: 'Systeme d\'Alerte Precoce',
 
-      // REDIRECTION AUTOMATIQUE selon l'etat de connexion
       home: _isLoggedIn
           ? DashboardPage(
               userRepository: widget.userRepository,

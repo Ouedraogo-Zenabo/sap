@@ -4,148 +4,155 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/features/user/data/sources/user_local_service.dart';
+import 'package:flutter/foundation.dart';
 
 class PushNotificationService {
-  PushNotificationService._privateConstructor();
-  static final PushNotificationService _instance = PushNotificationService._privateConstructor();
-  factory PushNotificationService() => _instance;
+  static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
-
-  String? _fcmToken;
-  String? get fcmToken => _fcmToken;
-
-  static Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-    await Firebase.initializeApp();
-    // handle background message here (minimal)
-    debugPrint('Background message received: ${message.messageId}');
-  }
-
-  Future<void> initialize() async {
-    try {
-      await Firebase.initializeApp();
-
-      // iOS / Android permission
-      await _requestPermissions();
-
-      // Local notifications setup
-      await _setupLocalNotifications();
-
-      // Get token
-      _fcmToken = await _messaging.getToken();
-      debugPrint('FCM token: $_fcmToken');
-
-      // Listen token refresh
-      _messaging.onTokenRefresh.listen((token) async {
-        _fcmToken = token;
-        await registerTokenOnServer(token);
-      });
-
-      // Foreground messages
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-        debugPrint('Foreground message: ${message.messageId}');
-        await _showLocalNotification(message);
-      });
-
-      // When the app is opened from a notification
-      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        debugPrint('Notification opened app: ${message.messageId}');
-        // navigation logic can be added here
-      });
-
-      // register token on backend (best-effort)
-      if (_fcmToken != null) {
-        await registerTokenOnServer(_fcmToken!);
-      }
-    } catch (e) {
-      debugPrint('PushNotificationService.initialize error: $e');
-    }
-  }
-
-  Future<void> _requestPermissions() async {
-    if (Platform.isIOS) {
-      await _messaging.requestPermission(alert: true, badge: true, sound: true);
-    } else if (Platform.isAndroid) {
-      // On Android 13+ permissions must be requested at runtime; handled in app UI if desired
-    }
-  }
-
-  Future<void> _setupLocalNotifications() async {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    final DarwinInitializationSettings initializationSettingsIOS =
-        const DarwinInitializationSettings();
-
-    final InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
+  /// Initialise Firebase Cloud Messaging et les notifications locales
+  static Future<void> initialize() async {
+    // Demander la permission pour les notifications
+    final settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
     );
 
+    debugPrint('🔔 Permission notifications: ${settings.authorizationStatus}');
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      debugPrint('✅ Notifications autorisées');
+    } else {
+      debugPrint('❌ Notifications refusées');
+      return;
+    }
+
+    // Initialiser les notifications locales
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+    
     await _localNotifications.initialize(
-      settings: initializationSettings,
+      settings: initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        debugPrint('Local notification tapped: ${response.payload}');
+        debugPrint('📱 Notification cliquée: ${response.payload}');
       },
     );
+
+    // Créer le canal de notification Android
+    const androidChannel = AndroidNotificationChannel(
+      'alerts',
+      'Alertes',
+      description: 'Notifications pour les alertes',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(androidChannel);
+
+    // Obtenir le token FCM
+    final token = await _firebaseMessaging.getToken();
+    debugPrint('🔑 FCM Token: $token');
+    
+    // TODO: Envoyer ce token au serveur backend
+    if (token != null) {
+      await _sendTokenToServer(token);
+    }
+
+    // Écouter les changements de token
+    _firebaseMessaging.onTokenRefresh.listen((newToken) {
+      debugPrint('🔄 Nouveau FCM Token: $newToken');
+      _sendTokenToServer(newToken);
+    });
+
+    // Gérer les messages reçus quand l'app est au premier plan
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('📩 Message reçu (foreground): ${message.notification?.title}');
+      _showNotification(message);
+    });
+
+    // Gérer les messages quand l'app est en arrière-plan mais ouverte
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('📬 Message ouvert (background): ${message.notification?.title}');
+      _handleNotificationTap(message);
+    });
+
+    // Vérifier si l'app a été ouverte depuis une notification
+    final initialMessage = await _firebaseMessaging.getInitialMessage();
+    if (initialMessage != null) {
+      debugPrint('🚀 App ouverte depuis notification: ${initialMessage.notification?.title}');
+      _handleNotificationTap(initialMessage);
+    }
   }
 
-  Future<void> _showLocalNotification(RemoteMessage message) async {
+  /// Affiche une notification locale pour un message Firebase
+  static Future<void> _showNotification(RemoteMessage message) async {
+    final notification = message.notification;
+    final android = message.notification?.android;
+
+    if (notification == null) {
+      debugPrint('⚠️ Pas de notification dans le message');
+      return;
+    }
+
+    const androidDetails = AndroidNotificationDetails(
+      'alerts',
+      'Alertes',
+      channelDescription: 'Notifications pour les alertes',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const notificationDetails = NotificationDetails(android: androidDetails);
+
     try {
-      final notification = message.notification;
-      final android = message.notification?.android;
-
-      if (notification == null) return;
-
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'default_channel',
-        'Default',
-        channelDescription: 'Default channel',
-        importance: Importance.max,
-        priority: Priority.high,
-      );
-
-      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
-
-      final NotificationDetails platformDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
-
       await _localNotifications.show(
         id: notification.hashCode,
-        title: notification.title,
-        body: notification.body,
-        notificationDetails: platformDetails,
-        payload: message.data.isNotEmpty ? message.data.toString() : null,
+        title: notification.title ?? 'Nouvelle alerte',
+        body: notification.body ?? '',
+        notificationDetails: notificationDetails,
+        payload: message.data.toString(),
       );
+      debugPrint('✅ Notification affichée: ${notification.title}');
     } catch (e) {
-      debugPrint('Error showing local notification: $e');
+      debugPrint('❌ Erreur affichage notification: $e');
     }
   }
 
-  Future<bool> registerTokenOnServer(String token, {String? accessToken}) async {
-    try {
-      // Best-effort: store token locally using existing service
-      final local = UserLocalService();
-      await local.saveFcmToken(token);
-      // Implement server registration call here if backend endpoint exists
-      return true;
-    } catch (e) {
-      debugPrint('registerTokenOnServer error: $e');
-      return false;
-    }
+  /// Gère le clic sur une notification
+  static void _handleNotificationTap(RemoteMessage message) {
+    debugPrint('👆 Notification tapée: ${message.data}');
+    // TODO: Naviguer vers la page de détail de l'alerte
+    // Exemple: Navigator.push(context, AlertDetailPage(alertId: message.data['alertId']));
   }
 
-  Future<bool> removeTokenFromServer({String? accessToken}) async {
+  /// Envoie le token FCM au serveur backend
+  static Future<void> _sendTokenToServer(String token) async {
     try {
-      final local = UserLocalService();
-      await local.removeFcmToken();
-      return true;
+      debugPrint('📤 Envoi du token au serveur...');
+      // TODO: Implémenter l'appel API pour enregistrer le token
+      // Exemple:
+      // final response = await http.post(
+      //   Uri.parse('http://197.239.116.77:3000/api/v1/users/fcm-token'),
+      //   headers: {'Authorization': 'Bearer $accessToken'},
+      //   body: jsonEncode({'fcmToken': token}),
+      // );
+      debugPrint('✅ Token envoyé au serveur');
     } catch (e) {
-      debugPrint('removeTokenFromServer error: $e');
-      return false;
+      debugPrint('❌ Erreur envoi token: $e');
     }
   }
+}
+
+/// Handler pour les messages en arrière-plan (doit être top-level)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('🌙 Message reçu en arrière-plan: ${message.notification?.title}');
 }

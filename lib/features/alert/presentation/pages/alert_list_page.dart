@@ -38,6 +38,7 @@ class _AlertsListPageState extends State<AlertsListPage> {
   void initState() {
     super.initState();
     _initializeNotifications();
+    _loadPreviousAlertIds();
     _loadAlerts();
   }
 
@@ -52,6 +53,29 @@ class _AlertsListPageState extends State<AlertsListPage> {
         // Gérer le tap sur la notification
       },
     );
+  }
+
+  /// Charge les IDs des alertes déjà vues depuis le stockage local
+  Future<void> _loadPreviousAlertIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString('seen_alert_ids');
+      if (stored != null && stored.isNotEmpty) {
+        _previousAlertIds = List<String>.from(jsonDecode(stored));
+      }
+    } catch (e) {
+      debugPrint('Erreur chargement alertes vues: $e');
+    }
+  }
+
+  /// Sauvegarde les IDs des alertes vues
+  Future<void> _savePreviousAlertIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('seen_alert_ids', jsonEncode(_previousAlertIds));
+    } catch (e) {
+      debugPrint('Erreur sauvegarde alertes vues: $e');
+    }
   }
 
   Future<String?> _getToken() async {
@@ -247,15 +271,15 @@ class _AlertsListPageState extends State<AlertsListPage> {
       
       if (alertId.isEmpty) continue;
       
+      // Si c'est une vraie nouvelle alerte (pas vue avant)
       if (!_previousAlertIds.contains(alertId)) {
         await _showNotificationForAlert(alert);
+        _previousAlertIds.add(alertId);
       }
     }
     
-    _previousAlertIds = newAlerts
-        .map((a) => (a['id'] ?? a['_id'] ?? '').toString())
-        .where((id) => id.isNotEmpty)
-        .toList();
+    // Sauvegarder les IDs mis à jour
+    await _savePreviousAlertIds();
   }
 
   /// Affiche une notification locale pour une nouvelle alerte
