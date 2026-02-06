@@ -20,18 +20,25 @@ class AlertDetailsPage extends StatefulWidget {
   State<AlertDetailsPage> createState() => _AlertDetailsPageState();
 }
 
-class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerProviderStateMixin {
+class _AlertDetailsPageState extends State<AlertDetailsPage>
+    with SingleTickerProviderStateMixin {
   bool loading = true;
   String? error;
   Map<String, dynamic>? alertData;
   late TabController _tabController;
-  
+
+  // =================== COMMENTAIRES ===================
+  final TextEditingController _commentController = TextEditingController();
+  List<Map<String, dynamic>> _comments = [];
+  bool _loadingComments = false;
+  String? _commentsError;
+
   // Variables pour l'upload de médias
   bool _uploadingMedia = false;
   PlatformFile? _selectedImage;
   PlatformFile? _selectedVideo;
   PlatformFile? _selectedAudio;
-  
+
   // Variables pour l'enregistrement audio
   AudioRecorder? _audioRecorder;
   AudioPlayer? _audioPlayer;
@@ -39,13 +46,23 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
   bool _isRecording = false;
   bool _isPlayingRecorded = false;
   Duration _recordDuration = Duration.zero;
-  
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this); // 3 onglets : Détails, Médias, Commentaires
+    /*
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+    ); // 3 onglets : Détails, Médias, Commentaires
+    */
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+    ); // 2 onglets : Détails, Commentaires (Médias commenté)
     _loadAlert();
-    
+    _loadComments();
+
     // Initialiser l'audio
     if (!kIsWeb) {
       _audioRecorder = AudioRecorder();
@@ -68,43 +85,37 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
   @override
   void dispose() {
     _tabController.dispose();
+    _commentController.dispose();
     super.dispose();
   }
 
   /// Vérifie si l'alerte est encore modifiable
   /// Règle métier : seules les alertes DRAFT/BROUILLON et PENDING peuvent être modifiées
   bool get _isEditable {
-  final status = (alertData?['status'] ?? '').toString().toUpperCase();
+    final status = (alertData?['status'] ?? '').toString().toUpperCase();
 
-  // Aligné sur le backend : DRAFT et PENDING uniquement
-  const editableStatuses = {'DRAFT', 'BROUILLON', 'PENDING'};
-  return editableStatuses.contains(status);
-}
-
-
+    // Aligné sur le backend : utiliser les codes retournés par l'API
+    const editableStatuses = {'DRAFT', 'PENDING'};
+    return editableStatuses.contains(status);
+  }
 
   /// Navigation vers la page de création en mode édition
   /// Toutes les données existantes sont transmises
- Future<void> _goToEditAlert() async {
-  if (!_isEditable) return;
+  Future<void> _goToEditAlert() async {
+    if (!_isEditable) return;
 
-  final updated = await Navigator.of(context).push<bool>(
-    MaterialPageRoute(
-      builder: (_) => CreateAlertPage(
-        isEditMode: true,
-        existingAlert: alertData!,
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            CreateAlertPage(isEditMode: true, existingAlert: alertData!),
       ),
-    ),
-  );
+    );
 
-  // 🔁 Si modification confirmée → reload
-  if (updated == true) {
-    await _loadAlert();
+    // 🔁 Si modification confirmée → reload
+    if (updated == true) {
+      await _loadAlert();
+    }
   }
-}
-
-
-
 
   // ========================== TOKEN / API ==========================
   Future<String?> _getToken() async {
@@ -120,16 +131,25 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
       final refresh = await UserLocalService().getRefreshToken();
       if (refresh == null || refresh.isEmpty) return null;
       final url = Uri.parse("http://197.239.116.77:3000/api/v1/auth/refresh");
-      final resp = await http.post(url,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'refreshToken': refresh}));
+      final resp = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': refresh}),
+      );
       if (resp.statusCode == 200) {
         final decoded = jsonDecode(resp.body);
         final data = decoded['data'] ?? decoded;
-        final newAccess = (data is Map) ? (data['accessToken'] ?? data['access_token']) : null;
-        final newRefresh = (data is Map) ? (data['refreshToken'] ?? data['refresh_token']) : null;
+        final newAccess = (data is Map)
+            ? (data['accessToken'] ?? data['access_token'])
+            : null;
+        final newRefresh = (data is Map)
+            ? (data['refreshToken'] ?? data['refresh_token'])
+            : null;
         if (newAccess is String && newAccess.isNotEmpty) {
-          await UserLocalService().saveTokens(newAccess, newRefresh is String ? newRefresh : refresh);
+          await UserLocalService().saveTokens(
+            newAccess,
+            newRefresh is String ? newRefresh : refresh,
+          );
           return newAccess;
         }
       }
@@ -155,8 +175,13 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
         return;
       }
 
-      final url = Uri.parse("http://197.239.116.77:3000/api/v1/alerts/${widget.alertId}");
-      Map<String, String> headers() => {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'};
+      final url = Uri.parse(
+        "http://197.239.116.77:3000/api/v1/alerts/${widget.alertId}",
+      );
+      Map<String, String> headers() => {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
       var resp = await http.get(url, headers: headers());
 
       if (resp.statusCode == 401) {
@@ -202,7 +227,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
     try {
       final dt = DateTime.tryParse(d);
       if (dt == null) return d;
-      return "${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')}/${dt.year} ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}";
+      return "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
     } catch (_) {
       return d;
     }
@@ -211,71 +236,89 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
   Widget _badge(String text, Color bg, Color fg) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 13)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 13),
+      ),
     );
   }
 
   Widget _infoTile(String label, String value) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      const SizedBox(height: 6),
-      Text(value.isNotEmpty ? value : '—', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 6),
+        Text(
+          value.isNotEmpty ? value : '—',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
   }
 
- 
   // =================== VÉRIFICATIONS DE MÉDIAS ===================
-  
+
   bool _hasImages() {
     if (alertData == null) return false;
-    
+
     // Vérifier imageUrl ou images[]
-    if (alertData!['imageUrl'] != null && (alertData!['imageUrl'] as String).isNotEmpty) {
+    if (alertData!['imageUrl'] != null &&
+        (alertData!['imageUrl'] as String).isNotEmpty) {
       return true;
     }
-    
-    if (alertData!['images'] is List && (alertData!['images'] as List).isNotEmpty) {
+
+    if (alertData!['images'] is List &&
+        (alertData!['images'] as List).isNotEmpty) {
       return true;
     }
-    
+
     return false;
   }
 
   bool _hasVideos() {
     if (alertData == null) return false;
-    
-    if (alertData!['videoUrl'] != null && (alertData!['videoUrl'] as String).isNotEmpty) {
+
+    if (alertData!['videoUrl'] != null &&
+        (alertData!['videoUrl'] as String).isNotEmpty) {
       return true;
     }
-    
-    if (alertData!['videos'] is List && (alertData!['videos'] as List).isNotEmpty) {
+
+    if (alertData!['videos'] is List &&
+        (alertData!['videos'] as List).isNotEmpty) {
       return true;
     }
-    
+
     return false;
   }
 
   bool _hasAudio() {
     if (alertData == null) return false;
-    return alertData!['audioUrl'] != null && (alertData!['audioUrl'] as String).isNotEmpty;
+    return alertData!['audioUrl'] != null &&
+        (alertData!['audioUrl'] as String).isNotEmpty;
   }
 
   bool _hasAttachments() {
     if (alertData == null) return false;
-    return alertData!['attachments'] is List && (alertData!['attachments'] as List).isNotEmpty;
+    return alertData!['attachments'] is List &&
+        (alertData!['attachments'] as List).isNotEmpty;
   }
 
   // =================== CONSTRUCTION DES WIDGETS DE MÉDIAS ===================
 
   Widget _buildImageGrid() {
     final List<String> imageUrls = [];
-    
+
     // Image unique
-    if (alertData!['imageUrl'] != null && (alertData!['imageUrl'] as String).isNotEmpty) {
+    if (alertData!['imageUrl'] != null &&
+        (alertData!['imageUrl'] as String).isNotEmpty) {
       imageUrls.add(alertData!['imageUrl']);
     }
-    
+
     // Liste d'images
     if (alertData!['images'] is List) {
       for (var img in alertData!['images'] as List) {
@@ -286,7 +329,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
         }
       }
     }
-    
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -314,7 +357,10 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                       children: [
                         Icon(Icons.broken_image, size: 48, color: Colors.grey),
                         SizedBox(height: 8),
-                        Text('Image non disponible', style: TextStyle(fontSize: 12)),
+                        Text(
+                          'Image non disponible',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                   ),
@@ -324,9 +370,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                 if (loadingProgress == null) return child;
                 return Container(
                   color: Colors.grey[200],
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  child: const Center(child: CircularProgressIndicator()),
                 );
               },
             ),
@@ -374,7 +418,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
 
   Widget _buildVideoList() {
     final List<Map<String, dynamic>> videos = [];
-    
+
     // Vidéo unique
     if (alertData!['videoUrl'] != null) {
       videos.add({
@@ -383,7 +427,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
         'name': 'Vidéo',
       });
     }
-    
+
     // Liste de vidéos
     if (alertData!['videos'] is List) {
       for (var vid in alertData!['videos'] as List) {
@@ -398,7 +442,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
         }
       }
     }
-    
+
     return Column(
       children: videos.map((video) {
         return Container(
@@ -436,7 +480,10 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                     child: const Icon(Icons.videocam, size: 30),
                   ),
             title: Text(video['name'] ?? 'Vidéo'),
-            trailing: const Icon(Icons.play_circle_filled, color: Colors.purple),
+            trailing: const Icon(
+              Icons.play_circle_filled,
+              color: Colors.purple,
+            ),
             onTap: () {
               // TODO: Ouvrir le lecteur vidéo
               ScaffoldMessenger.of(context).showSnackBar(
@@ -452,7 +499,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
   Widget _buildAudioPlayer() {
     final audioUrl = alertData!['audioUrl'] as String;
     final audioDescription = alertData!['audioDescription'] as String?;
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -518,13 +565,13 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
 
   Widget _buildAttachmentList() {
     final attachments = alertData!['attachments'] as List;
-    
+
     return Column(
       children: attachments.map((attachment) {
         final name = attachment['filename'] ?? attachment['name'] ?? 'Fichier';
         final size = attachment['size'] ?? 0;
         final url = attachment['url'];
-        
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -559,7 +606,9 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
   Future<void> _startRecording() async {
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enregistrement audio non disponible sur le Web')),
+        const SnackBar(
+          content: Text('Enregistrement audio non disponible sur le Web'),
+        ),
       );
       return;
     }
@@ -574,10 +623,11 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
       }
 
       final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/alert_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path =
+          '${dir.path}/alert_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
       await _audioRecorder!.start(const RecordConfig(), path: path);
-      
+
       setState(() {
         _isRecording = true;
         _recordDuration = Duration.zero;
@@ -587,14 +637,16 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
       Stream.periodic(const Duration(milliseconds: 100)).listen((_) {
         if (_isRecording && mounted) {
           setState(() {
-            _recordDuration = Duration(milliseconds: _recordDuration.inMilliseconds + 100);
+            _recordDuration = Duration(
+              milliseconds: _recordDuration.inMilliseconds + 100,
+            );
           });
         }
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
     }
   }
 
@@ -606,9 +658,9 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
         _recordedAudioPath = path;
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
     }
   }
 
@@ -622,9 +674,9 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
         await _audioPlayer!.play(DeviceFileSource(_recordedAudioPath!));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
     }
   }
 
@@ -639,6 +691,83 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
     final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return "$minutes:$seconds";
+  }
+
+  // =================== COMMENTAIRES (API) ===================
+
+  String _commentAuthorName(Map<String, dynamic> comment) {
+    final author = comment['author'];
+    if (author is Map) {
+      final firstName = (author['firstName'] ?? '').toString().trim();
+      final lastName = (author['lastName'] ?? '').toString().trim();
+      final fullName = "$firstName $lastName".trim();
+      if (fullName.isNotEmpty) return fullName;
+    }
+    if (comment['authorId'] != null) return 'Auteur';
+    return 'Anonyme';
+  }
+
+  Future<void> _loadComments() async {
+    setState(() {
+      _loadingComments = true;
+      _commentsError = null;
+    });
+
+    try {
+      String? token = await _getToken();
+      if (token == null || token.isEmpty) {
+        setState(() {
+          _commentsError = "Token manquant - reconnecte toi";
+          _loadingComments = false;
+        });
+        return;
+      }
+
+      final url = Uri.parse(
+        "http://197.239.116.77:3000/api/v1/alerts/${widget.alertId}/comments",
+      );
+      Map<String, String> headers() => {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
+      var resp = await http.get(url, headers: headers());
+
+      if (resp.statusCode == 401) {
+        final newToken = await _refreshAccessToken();
+        if (newToken != null && newToken.isNotEmpty) {
+          token = newToken;
+          resp = await http.get(url, headers: headers());
+        }
+      }
+
+      if (resp.statusCode != 200) {
+        setState(() {
+          _commentsError = httpErrorMessage(resp.statusCode, resp.body);
+          _loadingComments = false;
+        });
+        return;
+      }
+
+      final decoded = jsonDecode(resp.body);
+      List list = [];
+      if (decoded is Map && decoded['data'] is List) {
+        list = decoded['data'] as List;
+      } else if (decoded is List) {
+        list = decoded;
+      }
+
+      setState(() {
+        _comments = list
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        _loadingComments = false;
+      });
+    } catch (e) {
+      setState(() {
+        _commentsError = "Erreur réseau: $e";
+        _loadingComments = false;
+      });
+    }
   }
 
   // =================== FONCTIONS UPLOAD MÉDIAS ===================
@@ -677,9 +806,16 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
   }
 
   Future<void> _uploadMediasToAlert() async {
-    if (_selectedImage == null && _selectedVideo == null && _selectedAudio == null && _recordedAudioPath == null) {
+    if (_selectedImage == null &&
+        _selectedVideo == null &&
+        _selectedAudio == null &&
+        _recordedAudioPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez sélectionner ou enregistrer au moins un média')),
+        const SnackBar(
+          content: Text(
+            'Veuillez sélectionner ou enregistrer au moins un média',
+          ),
+        ),
       );
       return;
     }
@@ -692,7 +828,9 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
         throw Exception('Token manquant');
       }
 
-      final url = Uri.parse("http://197.239.116.77:3000/api/v1/alerts/${widget.alertId}/attachments");
+      final url = Uri.parse(
+        "http://197.239.116.77:3000/api/v1/alerts/${widget.alertId}/attachments",
+      );
       final request = http.MultipartRequest('POST', url);
       request.headers['Authorization'] = 'Bearer $token';
 
@@ -705,19 +843,23 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
           } else if (_selectedImage!.name.toLowerCase().endsWith('.gif')) {
             contentType = 'image/gif';
           }
-          
-          request.files.add(http.MultipartFile.fromBytes(
-            'image',
-            _selectedImage!.bytes!,
-            filename: _selectedImage!.name,
-            contentType: http.MediaType.parse(contentType),
-          ));
+
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'image',
+              _selectedImage!.bytes!,
+              filename: _selectedImage!.name,
+              contentType: http.MediaType.parse(contentType),
+            ),
+          );
         } else if (!kIsWeb && _selectedImage!.path != null) {
-          request.files.add(await http.MultipartFile.fromPath(
-            'image',
-            _selectedImage!.path!,
-            filename: _selectedImage!.name,
-          ));
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'image',
+              _selectedImage!.path!,
+              filename: _selectedImage!.name,
+            ),
+          );
         }
       }
 
@@ -728,47 +870,58 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
           if (_selectedVideo!.name.toLowerCase().endsWith('.webm')) {
             contentType = 'video/webm';
           }
-          
-          request.files.add(http.MultipartFile.fromBytes(
-            'video',
-            _selectedVideo!.bytes!,
-            filename: _selectedVideo!.name,
-            contentType: http.MediaType.parse(contentType),
-          ));
+
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'video',
+              _selectedVideo!.bytes!,
+              filename: _selectedVideo!.name,
+              contentType: http.MediaType.parse(contentType),
+            ),
+          );
         } else if (!kIsWeb && _selectedVideo!.path != null) {
-          request.files.add(await http.MultipartFile.fromPath(
-            'video',
-            _selectedVideo!.path!,
-            filename: _selectedVideo!.name,
-          ));
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'video',
+              _selectedVideo!.path!,
+              filename: _selectedVideo!.name,
+            ),
+          );
         }
       }
 
       // Ajouter l'audio uploadé
       if (_selectedAudio != null) {
         if (kIsWeb && _selectedAudio!.bytes != null) {
-          request.files.add(http.MultipartFile.fromBytes(
-            'audio',
-            _selectedAudio!.bytes!,
-            filename: _selectedAudio!.name,
-            contentType: http.MediaType.parse('audio/mpeg'),
-          ));
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'audio',
+              _selectedAudio!.bytes!,
+              filename: _selectedAudio!.name,
+              contentType: http.MediaType.parse('audio/mpeg'),
+            ),
+          );
         } else if (!kIsWeb && _selectedAudio!.path != null) {
-          request.files.add(await http.MultipartFile.fromPath(
-            'audio',
-            _selectedAudio!.path!,
-            filename: _selectedAudio!.name,
-          ));
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'audio',
+              _selectedAudio!.path!,
+              filename: _selectedAudio!.name,
+            ),
+          );
         }
       }
 
       // Ajouter l'audio enregistré
       if (_recordedAudioPath != null && !kIsWeb) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'audio',
-          _recordedAudioPath!,
-          filename: 'recorded_audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
-        ));
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'audio',
+            _recordedAudioPath!,
+            filename:
+                'recorded_audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
+          ),
+        );
       }
 
       print("📤 Upload de ${request.files.length} fichier(s)...");
@@ -787,7 +940,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
               backgroundColor: Colors.green,
             ),
           );
-          
+
           // Réinitialiser les sélections
           setState(() {
             _selectedImage = null;
@@ -796,7 +949,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
             _recordedAudioPath = null;
             _recordDuration = Duration.zero;
           });
-          
+
           // Recharger l'alerte pour afficher les nouveaux médias
           _loadAlert();
         }
@@ -843,7 +996,13 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                         children: const [
                           Icon(Icons.image, color: Colors.blue),
                           SizedBox(width: 8),
-                          Text('Photos', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(
+                            'Photos',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -861,7 +1020,13 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                         children: const [
                           Icon(Icons.video_library, color: Colors.purple),
                           SizedBox(width: 8),
-                          Text('Vidéos', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(
+                            'Vidéos',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -879,7 +1044,13 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                         children: const [
                           Icon(Icons.audiotrack, color: Colors.orange),
                           SizedBox(width: 8),
-                          Text('Audio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(
+                            'Audio',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -897,7 +1068,13 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                         children: const [
                           Icon(Icons.attach_file, color: Colors.grey),
                           SizedBox(width: 8),
-                          Text('Fichiers joints', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(
+                            'Fichiers joints',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -911,7 +1088,10 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
               ],
             ),
 
-          if (!(_hasImages() || _hasVideos() || _hasAudio() || _hasAttachments()))
+          if (!(_hasImages() ||
+              _hasVideos() ||
+              _hasAudio() ||
+              _hasAttachments()))
             Column(
               children: const [
                 SizedBox(height: 32),
@@ -977,7 +1157,10 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                       children: [
                         const Text(
                           '🎤 Enregistrement audio',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         if (_recordedAudioPath == null)
@@ -992,21 +1175,32 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Row(
                                         children: [
-                                          const Icon(Icons.mic, color: Colors.white),
+                                          const Icon(
+                                            Icons.mic,
+                                            color: Colors.white,
+                                          ),
                                           const SizedBox(width: 8),
                                           const Text(
                                             'Enregistrement en cours...',
-                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ],
                                       ),
                                       Text(
                                         _formatDuration(_recordDuration),
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1017,11 +1211,21 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                                 children: [
                                   Expanded(
                                     child: ElevatedButton.icon(
-                                      onPressed: _isRecording ? _stopRecording : _startRecording,
-                                      icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                                      label: Text(_isRecording ? 'Arrêter' : 'Enregistrer'),
+                                      onPressed: _isRecording
+                                          ? _stopRecording
+                                          : _startRecording,
+                                      icon: Icon(
+                                        _isRecording ? Icons.stop : Icons.mic,
+                                      ),
+                                      label: Text(
+                                        _isRecording
+                                            ? 'Arrêter'
+                                            : 'Enregistrer',
+                                      ),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: _isRecording ? Colors.red : Colors.orange,
+                                        backgroundColor: _isRecording
+                                            ? Colors.red
+                                            : Colors.orange,
                                         foregroundColor: Colors.white,
                                       ),
                                     ),
@@ -1036,25 +1240,39 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.check_circle, color: Colors.green),
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green,
+                                  ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       'Audio enregistré ($_formatDuration(_recordDuration))',
-                                      style: const TextStyle(fontWeight: FontWeight.w500),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ),
                                   IconButton(
                                     onPressed: _deleteRecordedAudio,
-                                    icon: const Icon(Icons.close, color: Colors.red),
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.red,
+                                    ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 8),
                               ElevatedButton.icon(
                                 onPressed: _playRecordedAudio,
-                                icon: Icon(_isPlayingRecorded ? Icons.pause : Icons.play_arrow),
-                                label: Text(_isPlayingRecorded ? 'Pause' : 'Écouter'),
+                                icon: Icon(
+                                  _isPlayingRecorded
+                                      ? Icons.pause
+                                      : Icons.play_arrow,
+                                ),
+                                label: Text(
+                                  _isPlayingRecorded ? 'Pause' : 'Écouter',
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.orange,
                                   foregroundColor: Colors.white,
@@ -1075,10 +1293,17 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.cloud_upload),
-                  label: Text(_uploadingMedia ? 'Upload en cours...' : 'Uploader les médias'),
+                  label: Text(
+                    _uploadingMedia
+                        ? 'Upload en cours...'
+                        : 'Uploader les médias',
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -1099,7 +1324,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
                     Icon(Icons.lock, size: 64, color: Colors.grey),
                     SizedBox(height: 16),
                     Text(
-                      'Les médias ne peuvent être ajoutés que pour les alertes en statut BROUILLON ou EN ATTENTE',
+                      'Les médias ne peuvent être ajoutés que pour les alertes en statut Brouillon ou En attente',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
@@ -1165,8 +1390,6 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
     );
   }
 
- 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1182,7 +1405,7 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
           indicatorColor: Colors.orange,
           tabs: const [
             Tab(text: "Détails complets"),
-            Tab(text: "Médias"),
+            // Tab(text: "Médias"),
             Tab(text: "Commentaires"),
           ],
         ),
@@ -1190,304 +1413,518 @@ class _AlertDetailsPageState extends State<AlertDetailsPage> with SingleTickerPr
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null
-              ? Center(
-                  child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(error!, style: const TextStyle(color: Colors.red)),
-                ))
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    
-                    // =================== Onglet Détails complets ===================
-                    SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // ===== Header card =====
-                          Container(
-                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                                  decoration: const BoxDecoration(
-                                    gradient: LinearGradient(colors: [Color(0xFFFFA726), Color(0xFFE53935)]),
-                                    borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                const Icon(Icons.warning_amber_rounded, size: 28, color: Colors.white),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Text(
-                                                    alertData?['title'] ?? 'Alerte SAP',
-                                                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text("ID: ${alertData?['id'] ?? alertData?['_id'] ?? ''}", style: const TextStyle(color: Color(0xFFFFEBEE), fontSize: 12)),
-                                          ],
-                                        ),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          _badge((alertData?['status'] ?? '').toString(), Colors.white.withOpacity(0.18), Colors.white),
-                                          const SizedBox(height: 8),
-                                          _badge((alertData?['severity'] ?? '').toString(), Colors.white.withOpacity(0.18), Colors.white),
-                                        ],
-                                      )
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(color: Colors.white, borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(12), bottomRight: Radius.circular(12))),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(child: _infoTile("Type", (alertData?['type'] ?? '').toString())),
-                                          const SizedBox(width: 12),
-                                          Expanded(child: _infoTile("Zone", (alertData?['zoneName'] ?? (alertData?['zone'] is Map ? alertData!['zone']['name'] : 'Zone non spécifiée')).toString())),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(child: _infoTile("Début", _formatDate(alertData?['startDate']?.toString()))),
-                                          const SizedBox(width: 12),
-                                          Expanded(child: _infoTile("Fin", _formatDate(alertData?['endDate']?.toString()))),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(child: _infoTile("Action requise", (alertData?['actionRequired'] == true) ? "Oui" : "Non")),
-                                          const SizedBox(width: 12),
-                                          Expanded(child: _infoTile("Créée par", ((alertData?['createdBy'] is Map) ? "${alertData!['createdBy']['firstName'] ?? ''} ${alertData!['createdBy']['lastName'] ?? ''}" : (alertData?['createdByName'] ?? '—')).toString())),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // ===== Message =====
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              const Text("Message", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 8),
-                              Text(alertData?['message'] ?? 'Aucun message', style: const TextStyle(fontSize: 14)),
-                            ]),
-                          ),
-                          const SizedBox(height: 12),
-                          // ===== Instructions =====
-                          if ((alertData?['instructions'] ?? '').toString().isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Row(children: const [Icon(Icons.info_outline, color: Colors.orange), SizedBox(width: 8), Text("Instructions", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))]),
-                                const SizedBox(height: 8),
-                                Text(alertData?['instructions'] ?? '', style: const TextStyle(fontSize: 14)),
-                              ]),
-                            ),
-                          const SizedBox(height: 12),
-                          // ===== System info =====
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              const Text("Informations système", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 8),
-                              Row(children: [
-                                Expanded(child: Text("Créée: ${_formatDate(alertData?['createdAt']?.toString())}")),
-                                Expanded(child: Text("Dernière modif: ${_formatDate(alertData?['updatedAt']?.toString())}")),
-                              ]),
-                            ]),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // =================== BOUTONS ACTIONS (Modifier / Annuler) ===================
-                          LayoutBuilder(
-                            builder: (context, constraints) {
-                              final isSmallScreen = constraints.maxWidth < 500;
-
-                              return Row(
-                                children: [
-                                  // ===== Bouton Modifier =====
-                                  if (_isEditable)
-                                    Expanded(
-                                      child: ElevatedButton.icon(
-                                        icon: const Icon(Icons.edit),
-                                        label: const Text("Modifier"),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.orange,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                        ),
-                                        onPressed: _goToEditAlert,
-                                      ),
-                                    ),
-
-                                  if (_isEditable) const SizedBox(width: 12),
-
-                                  // ===== Bouton Annuler =====
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      icon: const Icon(Icons.close),
-                                      label: const Text("Annuler"),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                      ),
-                                      onPressed: () => Navigator.of(context).pop(),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-
-                          
-
-                        ],
-                      ),
-                    ),
-
-                    // =================== Onglet Médias (Affichage + Upload unifiés) ===================
-                    _buildMediaUploadTab(),
-
-          // =================== Onglet Commentaires ===================
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(error!, style: const TextStyle(color: Colors.red)),
+              ),
+            )
+          : TabBarView(
+              controller: _tabController,
               children: [
-                const Text("Commentaires", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 12),
-
-                // Liste des commentaires existants
-                if (alertData?['comments'] != null && (alertData!['comments'] as List).isNotEmpty)
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: (alertData!['comments'] as List).length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final comment = alertData!['comments'][index];
-                      return Container(
-                        padding: const EdgeInsets.all(12),
+                // =================== Onglet Détails complets ===================
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ===== Header card =====
+                      Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              comment['author'] ?? 'Anonyme',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 20,
+                              ),
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0xFFFFA726),
+                                    Color(0xFFE53935),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(12),
+                                  topRight: Radius.circular(12),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.warning_amber_rounded,
+                                              size: 28,
+                                              color: Colors.white,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                alertData?['title'] ??
+                                                    'Alerte SAP',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          "ID: ${alertData?['id'] ?? alertData?['_id'] ?? ''}",
+                                          style: const TextStyle(
+                                            color: Color(0xFFFFEBEE),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      _badge(
+                                        (alertData?['status'] ?? '').toString(),
+                                        Colors.white.withOpacity(0.18),
+                                        Colors.white,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _badge(
+                                        (alertData?['severity'] ?? '')
+                                            .toString(),
+                                        Colors.white.withOpacity(0.18),
+                                        Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(comment['message'] ?? ''),
-                            const SizedBox(height: 4),
-                            Text(
-                              comment['createdAt'] != null ? _formatDate(comment['createdAt']) : '',
-                              style: const TextStyle(fontSize: 10, color: Colors.grey),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: const BorderRadius.only(
+                                  bottomLeft: Radius.circular(12),
+                                  bottomRight: Radius.circular(12),
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _infoTile(
+                                          "Type",
+                                          (alertData?['type'] ?? '').toString(),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _infoTile(
+                                          "Zone",
+                                          (alertData?['zoneName'] ??
+                                                  (alertData?['zone'] is Map
+                                                      ? alertData!['zone']['name']
+                                                      : 'Zone non spécifiée'))
+                                              .toString(),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _infoTile(
+                                          "Début",
+                                          _formatDate(
+                                            alertData?['startDate']?.toString(),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _infoTile(
+                                          "Fin",
+                                          _formatDate(
+                                            alertData?['endDate']?.toString(),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _infoTile(
+                                          "Action requise",
+                                          (alertData?['actionRequired'] == true)
+                                              ? "Oui"
+                                              : "Non",
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _infoTile(
+                                          "Créée par",
+                                          ((alertData?['createdBy'] is Map)
+                                                  ? "${alertData!['createdBy']['firstName'] ?? ''} ${alertData!['createdBy']['lastName'] ?? ''}"
+                                                  : (alertData?['createdByName'] ??
+                                                        '—'))
+                                              .toString(),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                      );
-                    },
-                  ),
-                if (alertData?['comments']?.isEmpty ?? true)
-                  const Text("Aucun commentaire."),
-
-                const SizedBox(height: 16),
-                // Ajouter un commentaire
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        decoration: const InputDecoration(
-                          hintText: "Ajouter un commentaire...",
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      const SizedBox(height: 16),
+                      // ===== Message =====
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Message",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              alertData?['message'] ?? 'Aucun message',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _postComment,
-                      child: const Text("Envoyer"),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      // ===== Instructions =====
+                      if ((alertData?['instructions'] ?? '')
+                          .toString()
+                          .isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: Colors.orange,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    "Instructions",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                alertData?['instructions'] ?? '',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      // ===== System info =====
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Informations système",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    "Créée: ${_formatDate(alertData?['createdAt']?.toString())}",
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    "Dernière modif: ${_formatDate(alertData?['updatedAt']?.toString())}",
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // =================== BOUTONS ACTIONS (Modifier / Annuler) ===================
+                      /*
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isSmallScreen = constraints.maxWidth < 500;
+
+                          return Row(
+                            children: [
+                              // ===== Bouton Modifier =====
+                              if (_isEditable)
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.edit),
+                                    label: const Text("Modifier"),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.orange,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    onPressed: _goToEditAlert,
+                                  ),
+                                ),
+
+                              if (_isEditable) const SizedBox(width: 12),
+
+                              // ===== Bouton Annuler =====
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.close),
+                                  label: const Text("Annuler"),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: () => Navigator.of(context).pop(),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                      */
+                    ],
+                  ),
+                ),
+
+                // =================== Onglet Médias (Affichage + Upload unifiés) ===================
+                // _buildMediaUploadTab(),
+
+                // =================== Onglet Commentaires ===================
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Commentaires",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (_loadingComments)
+                        const Center(child: CircularProgressIndicator())
+                      else if (_commentsError != null)
+                        Text(
+                          _commentsError!,
+                          style: const TextStyle(color: Colors.red),
+                        )
+                      else if (_comments.isEmpty)
+                        const Text("Aucun commentaire.")
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _comments.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final comment = _comments[index];
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _commentAuthorName(comment),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text((comment['content'] ?? '').toString()),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    comment['createdAt'] != null
+                                        ? _formatDate(
+                                            comment['createdAt']?.toString(),
+                                          )
+                                        : '',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+
+                      const SizedBox(height: 16),
+                      // Ajouter un commentaire
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _commentController,
+                              decoration: const InputDecoration(
+                                hintText: "Ajouter un commentaire...",
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: _postComment,
+                            child: const Text("Envoyer"),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
-// =================== CONTROLLER ET FONCTIONS ===================
-final TextEditingController _commentController = TextEditingController();
-
-Future<void> _postComment() async {
-  final message = _commentController.text.trim();
-  if (message.isEmpty) return;
-
-  try {
-    final token = await _getToken();
-    if (token == null) return;
-
-    final url = Uri.parse("http://197.239.116.77:3000/api/v1/alerts/${widget.alertId}/comments");
-    final resp = await http.post(url,
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
-        body: jsonEncode({'message': message}));
-
-    if (resp.statusCode == 200 || resp.statusCode == 201) {
-      // Ajouter localement pour refresh immédiat
-      setState(() {
-        if (alertData?['comments'] == null) alertData!['comments'] = [];
-        alertData!['comments'].add({
-          'author': 'Moi', // remplacer par l'utilisateur réel si dispo
-          'message': message,
-          'createdAt': DateTime.now().toIso8601String(),
-        });
-        _commentController.clear();
-      });
-    } else {
-      debugPrint("Erreur envoi commentaire: ${resp.statusCode}");
+  // =================== COMMENTAIRES ===================
+  Future<void> _postComment() async {
+    final content = _commentController.text.trim();
+    if (content.isEmpty) return;
+    if (content.length < 2 || content.length > 2000) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Le commentaire doit contenir entre 2 et 2000 caractères.',
+          ),
+        ),
+      );
+      return;
     }
-  } catch (e) {
-    debugPrint("Erreur envoi commentaire: $e");
-  }     
-} 
+
+    try {
+      String? token = await _getToken();
+      if (token == null || token.isEmpty) return;
+
+      final url = Uri.parse(
+        "http://197.239.116.77:3000/api/v1/alerts/${widget.alertId}/comments",
+      );
+      var resp = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'content': content}),
+      );
+
+      if (resp.statusCode == 401) {
+        final newToken = await _refreshAccessToken();
+        if (newToken != null && newToken.isNotEmpty) {
+          token = newToken;
+          resp = await http.post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({'content': content}),
+          );
+        }
+      }
+
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        final decoded = jsonDecode(resp.body);
+        Map<String, dynamic>? newComment;
+        if (decoded is Map && decoded['data'] is Map) {
+          newComment = Map<String, dynamic>.from(decoded['data']);
+        }
+
+        setState(() {
+          if (newComment != null) {
+            _comments = [newComment, ..._comments];
+          }
+          _commentController.clear();
+        });
+
+        await _loadComments();
+      } else {
+        debugPrint("Erreur envoi commentaire: ${resp.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("Erreur envoi commentaire: $e");
+    }
+  }
 }

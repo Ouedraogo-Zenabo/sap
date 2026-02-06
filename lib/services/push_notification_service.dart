@@ -5,6 +5,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/features/user/data/sources/user_local_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class PushNotificationService {
   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
@@ -59,7 +62,7 @@ class PushNotificationService {
     final token = await _firebaseMessaging.getToken();
     debugPrint('🔑 FCM Token: $token');
     
-    // TODO: Envoyer ce token au serveur backend
+    // Envoyer ce token au serveur backend
     if (token != null) {
       await _sendTokenToServer(token);
     }
@@ -93,7 +96,6 @@ class PushNotificationService {
   /// Affiche une notification locale pour un message Firebase
   static Future<void> _showNotification(RemoteMessage message) async {
     final notification = message.notification;
-    final android = message.notification?.android;
 
     if (notification == null) {
       debugPrint('⚠️ Pas de notification dans le message');
@@ -137,17 +139,37 @@ class PushNotificationService {
   static Future<void> _sendTokenToServer(String token) async {
     try {
       debugPrint('📤 Envoi du token au serveur...');
-      // TODO: Implémenter l'appel API pour enregistrer le token
-      // Exemple:
-      // final response = await http.post(
-      //   Uri.parse('http://197.239.116.77:3000/api/v1/users/fcm-token'),
-      //   headers: {'Authorization': 'Bearer $accessToken'},
-      //   body: jsonEncode({'fcmToken': token}),
-      // );
-      debugPrint('✅ Token envoyé au serveur');
+      
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString('access_token');
+      
+      if (accessToken == null || accessToken.isEmpty) {
+        debugPrint('⚠️ Pas de token d\'authentification, token FCM non envoyé');
+        return;
+      }
+
+      final response = await http.patch(  // PATCH au lieu de POST
+        Uri.parse('http://197.239.116.77:3000/api/v1/users/me/fcm-token'),  // /me/ ajouté
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({'fcmToken': token}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('✅ Token FCM enregistré sur le serveur');
+      } else {
+        debugPrint('⚠️ Erreur enregistrement token: ${response.statusCode} - ${response.body}');
+      }
     } catch (e) {
       debugPrint('❌ Erreur envoi token: $e');
     }
+  }
+
+  /// Envoie le token FCM au serveur backend (méthode publique pour l'appeler depuis d'autres fichiers)
+  static Future<void> sendTokenToServer(String token) async {
+    await _sendTokenToServer(token);
   }
 }
 

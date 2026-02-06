@@ -6,6 +6,9 @@ import 'package:mobile_app/features/user/data/models/user_model.dart';
 import 'package:mobile_app/features/alert/data/sources/zones_local_service.dart';
 import '../../domain/auth_repository.dart';
 import '../../../dashboard/presentation/pages/dashboard_page.dart';
+import '../pages/forgot_password_page.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:mobile_app/services/push_notification_service.dart';  // ✅ Correction
 
 /// Formulaire Login totalement RESPONSIVE
 class LoginForm extends StatefulWidget {
@@ -79,6 +82,12 @@ class _LoginFormState extends State<LoginForm> {
           final userModel = UserModel.fromJson(user);
           await widget.userRepository.local.saveUser(userModel);
           print("✅ Profil utilisateur sauvegardé");
+
+          // Enregistrer le token FCM sur le serveur
+          final fcmToken = await FirebaseMessaging.instance.getToken();
+          if (fcmToken != null) {
+            await PushNotificationService.sendTokenToServer(fcmToken);
+          }
 
           // Launch zones sync in background so offline selections are available
           try {
@@ -229,6 +238,22 @@ class _LoginFormState extends State<LoginForm> {
                                   color: Colors.white,
                                 ),
                               ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ForgotPasswordPage(),
+                            ),
+                          );
+                        },
+                        child: const Text('Mot de passe oublié ?'),
                       ),
                     ),
                   ],
