@@ -71,12 +71,18 @@ class _ProfilePageState extends State<ProfilePage> {
       if (resp.statusCode == 200) {
         final decoded = jsonDecode(resp.body);
         final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
-        final access = data is Map ? (data['accessToken'] ?? data['access_token']) : null;
-        final refreshOut = data is Map ? (data['refreshToken'] ?? data['refresh_token']) : null;
+        final access = data is Map
+            ? (data['accessToken'] ?? data['access_token'])
+            : null;
+        final refreshOut = data is Map
+            ? (data['refreshToken'] ?? data['refresh_token'])
+            : null;
         if (access is String && access.isNotEmpty) {
           await UserLocalService().saveTokens(
             access,
-            refreshOut is String && refreshOut.isNotEmpty ? refreshOut : refresh,
+            refreshOut is String && refreshOut.isNotEmpty
+                ? refreshOut
+                : refresh,
           );
           return access;
         }
@@ -103,16 +109,25 @@ class _ProfilePageState extends State<ProfilePage> {
           if (cached != null && cached.isNotEmpty) {
             final userData = jsonDecode(cached) as Map<String, dynamic>;
             setState(() {
-              name = "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}".trim();
-              if (name.isEmpty) name = userData['name'] ?? userData['username'] ?? "Utilisateur";
+              name =
+                  "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}"
+                      .trim();
+              if (name.isEmpty)
+                name =
+                    userData['name'] ?? userData['username'] ?? "Utilisateur";
               email = userData['email'] ?? "";
               phone = userData['phone'] ?? userData['phoneNumber'] ?? "";
-              commune = userData['commune'] ?? userData['communeName'] ?? userData['zoneName'] ?? "";
+              commune =
+                  userData['commune'] ??
+                  userData['communeName'] ??
+                  userData['zoneName'] ??
+                  "";
               role = userData['role'] ?? "Point Focal Communal";
               totalAlerts = (userData['totalAlerts'] ?? 0) as int;
               alertsThisMonth = (userData['alertsThisMonth'] ?? 0) as int;
               alertsTransmitted = (userData['alertsTransmitted'] ?? 0) as int;
-              if (userData['monthlyStats'] is List) monthlyStats = (userData['monthlyStats'] as List).cast<int>();
+              if (userData['monthlyStats'] is List)
+                monthlyStats = (userData['monthlyStats'] as List).cast<int>();
               loading = false;
             });
             return;
@@ -128,9 +143,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final url = Uri.parse("http://197.239.116.77:3000/api/v1/auth/profile");
       Map<String, String> headers(String t) => {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $t',
-          };
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $t',
+      };
 
       var resp = await http.get(url, headers: headers(token));
 
@@ -151,17 +166,26 @@ class _ProfilePageState extends State<ProfilePage> {
             final decodedCache = jsonDecode(cached) as Map<String, dynamic>;
             final userData = decodedCache;
             setState(() {
-              name = "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}".trim();
-              if (name.isEmpty) name = userData['name'] ?? userData['username'] ?? "Utilisateur";
+              name =
+                  "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}"
+                      .trim();
+              if (name.isEmpty)
+                name =
+                    userData['name'] ?? userData['username'] ?? "Utilisateur";
               email = userData['email'] ?? "";
               phone = userData['phone'] ?? userData['phoneNumber'] ?? "";
-              commune = userData['commune'] ?? userData['communeName'] ?? userData['zoneName'] ?? "";
+              commune =
+                  userData['commune'] ??
+                  userData['communeName'] ??
+                  userData['zoneName'] ??
+                  "";
               role = userData['role'] ?? "Point Focal Communal";
 
               totalAlerts = (userData['totalAlerts'] ?? 0) as int;
               alertsThisMonth = (userData['alertsThisMonth'] ?? 0) as int;
               alertsTransmitted = (userData['alertsTransmitted'] ?? 0) as int;
-              if (userData['monthlyStats'] is List) monthlyStats = (userData['monthlyStats'] as List).cast<int>();
+              if (userData['monthlyStats'] is List)
+                monthlyStats = (userData['monthlyStats'] as List).cast<int>();
               loading = false;
             });
             return;
@@ -181,7 +205,9 @@ class _ProfilePageState extends State<ProfilePage> {
       Map<String, dynamic>? userData;
 
       if (decoded is Map) {
-        userData = (decoded['data'] ?? decoded['user'] ?? decoded) as Map<String, dynamic>?;
+        userData =
+            (decoded['data'] ?? decoded['user'] ?? decoded)
+                as Map<String, dynamic>?;
       }
 
       if (userData != null) {
@@ -192,11 +218,17 @@ class _ProfilePageState extends State<ProfilePage> {
         } catch (_) {}
 
         setState(() {
-          name = "${userData!['firstName'] ?? ''} ${userData['lastName'] ?? ''}".trim();
-          if (name.isEmpty) name = userData['name'] ?? userData['username'] ?? "Utilisateur";
+          name = "${userData!['firstName'] ?? ''} ${userData['lastName'] ?? ''}"
+              .trim();
+          if (name.isEmpty)
+            name = userData['name'] ?? userData['username'] ?? "Utilisateur";
           email = userData['email'] ?? "";
           phone = userData['phone'] ?? userData['phoneNumber'] ?? "";
-          commune = userData['commune'] ?? userData['communeName'] ?? userData['zoneName'] ?? "";
+          commune =
+              userData['commune'] ??
+              userData['communeName'] ??
+              userData['zoneName'] ??
+              "";
           role = userData['role'] ?? "Point Focal Communal";
 
           // Stats (adapter selon votre API)
@@ -225,16 +257,24 @@ class _ProfilePageState extends State<ProfilePage> {
         if (cached != null && cached.isNotEmpty) {
           final userData = jsonDecode(cached) as Map<String, dynamic>;
           setState(() {
-            name = "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}".trim();
-            if (name.isEmpty) name = userData['name'] ?? userData['username'] ?? "Utilisateur";
+            name =
+                "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}"
+                    .trim();
+            if (name.isEmpty)
+              name = userData['name'] ?? userData['username'] ?? "Utilisateur";
             email = userData['email'] ?? "";
             phone = userData['phone'] ?? userData['phoneNumber'] ?? "";
-            commune = userData['commune'] ?? userData['communeName'] ?? userData['zoneName'] ?? "";
+            commune =
+                userData['commune'] ??
+                userData['communeName'] ??
+                userData['zoneName'] ??
+                "";
             role = userData['role'] ?? "Point Focal Communal";
             totalAlerts = (userData['totalAlerts'] ?? 0) as int;
             alertsThisMonth = (userData['alertsThisMonth'] ?? 0) as int;
             alertsTransmitted = (userData['alertsTransmitted'] ?? 0) as int;
-            if (userData['monthlyStats'] is List) monthlyStats = (userData['monthlyStats'] as List).cast<int>();
+            if (userData['monthlyStats'] is List)
+              monthlyStats = (userData['monthlyStats'] as List).cast<int>();
             loading = false;
           });
           return;
@@ -286,14 +326,18 @@ class _ProfilePageState extends State<ProfilePage> {
       try {
         String? token = await _getToken();
         if (token != null && token.isNotEmpty) {
-          final url = Uri.parse("http://197.239.116.77:3000/api/v1/auth/logout");
-          await http.post(
-            url,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          ).timeout(const Duration(seconds: 5));
+          final url = Uri.parse(
+            "http://197.239.116.77:3000/api/v1/auth/logout",
+          );
+          await http
+              .post(
+                url,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer $token',
+                },
+              )
+              .timeout(const Duration(seconds: 5));
         }
 
         // Supprimer les tokens
@@ -306,10 +350,8 @@ class _ProfilePageState extends State<ProfilePage> {
         if (mounted) {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(
-              builder: (_) => LoginPage(
-                userRepository: widget.userRepository,
-                token: "",
-              ),
+              builder: (_) =>
+                  LoginPage(userRepository: widget.userRepository, token: ""),
             ),
             (route) => false,
           );
@@ -325,10 +367,8 @@ class _ProfilePageState extends State<ProfilePage> {
           } catch (_) {}
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(
-              builder: (_) => LoginPage(
-                userRepository: widget.userRepository,
-                token: "",
-              ),
+              builder: (_) =>
+                  LoginPage(userRepository: widget.userRepository, token: ""),
             ),
             (route) => false,
           );
@@ -396,10 +436,7 @@ class _ProfilePageState extends State<ProfilePage> {
         foregroundColor: Colors.black,
         elevation: 0.3,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadProfile,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadProfile),
         ],
       ),
       body: RefreshIndicator(
@@ -466,7 +503,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       blurRadius: 10,
                       color: Colors.black12,
                       offset: const Offset(0, 4),
-                    )
+                    ),
                   ],
                 ),
                 child: Column(
@@ -511,71 +548,71 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 25),
 
               // 3. STATISTIQUES
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      blurRadius: 10,
-                      color: Colors.black12,
-                      offset: const Offset(0, 4),
-                    )
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Statistiques personnelles",
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    if (monthlyStats.isNotEmpty && monthlyStats.any((v) => v > 0))
-                      SizedBox(
-                        height: 120,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (monthlyStats.length > 3)
-                              _bar(label: "J-3", value: monthlyStats[0].toDouble()),
-                            if (monthlyStats.length > 2)
-                              _bar(label: "J-2", value: monthlyStats[1].toDouble()),
-                            if (monthlyStats.length > 1)
-                              _bar(label: "J-1", value: monthlyStats[2].toDouble()),
-                            if (monthlyStats.isNotEmpty)
-                              _bar(label: "Mois", value: monthlyStats[3].toDouble()),
-                          ],
-                        ),
-                      ),
-                    if (monthlyStats.isEmpty || !monthlyStats.any((v) => v > 0))
-                      const SizedBox(
-                        height: 120,
-                        child: Center(
-                          child: Text(
-                            "Aucune donnée mensuelle disponible",
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ),
-                      ),
-                    const Divider(height: 30),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _statNumber(label: "Total", value: totalAlerts.toString()),
-                        _statNumber(label: "Ce mois", value: alertsThisMonth.toString()),
-                        _statNumber(label: "Transmises", value: alertsTransmitted.toString()),
-                      ],
-                    )
-                  ],
-                ),
-              ),
-              const SizedBox(height: 25),
+              // Container(
+              //   width: double.infinity,
+              //   padding: const EdgeInsets.all(18),
+              //   decoration: BoxDecoration(
+              //     color: Colors.white,
+              //     borderRadius: BorderRadius.circular(12),
+              //     boxShadow: [
+              //       BoxShadow(
+              //         blurRadius: 10,
+              //         color: Colors.black12,
+              //         offset: const Offset(0, 4),
+              //       )
+              //     ],
+              //   ),
+              //   child: Column(
+              //     crossAxisAlignment: CrossAxisAlignment.start,
+              //     children: [
+              //       const Text(
+              //         "Statistiques personnelles",
+              //         style: TextStyle(
+              //           fontSize: 17,
+              //           fontWeight: FontWeight.bold,
+              //         ),
+              //       ),
+              //       const SizedBox(height: 15),
+              //       if (monthlyStats.isNotEmpty && monthlyStats.any((v) => v > 0))
+              //         SizedBox(
+              //           height: 120,
+              //           child: Row(
+              //             crossAxisAlignment: CrossAxisAlignment.end,
+              //             children: [
+              //               if (monthlyStats.length > 3)
+              //                 _bar(label: "J-3", value: monthlyStats[0].toDouble()),
+              //               if (monthlyStats.length > 2)
+              //                 _bar(label: "J-2", value: monthlyStats[1].toDouble()),
+              //               if (monthlyStats.length > 1)
+              //                 _bar(label: "J-1", value: monthlyStats[2].toDouble()),
+              //               if (monthlyStats.isNotEmpty)
+              //                 _bar(label: "Mois", value: monthlyStats[3].toDouble()),
+              //             ],
+              //           ),
+              //         ),
+              //       if (monthlyStats.isEmpty || !monthlyStats.any((v) => v > 0))
+              //         const SizedBox(
+              //           height: 120,
+              //           child: Center(
+              //             child: Text(
+              //               "Aucune donnée mensuelle disponible",
+              //               style: TextStyle(color: Colors.grey),
+              //             ),
+              //           ),
+              //         ),
+              //       const Divider(height: 30),
+              //       Row(
+              //         mainAxisAlignment: MainAxisAlignment.spaceAround,
+              //         children: [
+              //           _statNumber(label: "Total", value: totalAlerts.toString()),
+              //           _statNumber(label: "Ce mois", value: alertsThisMonth.toString()),
+              //           _statNumber(label: "Transmises", value: alertsTransmitted.toString()),
+              //         ],
+              //       )
+              //     ],
+              //   ),
+              // ),
+              // const SizedBox(height: 25),
 
               // 4. PARAMÈTRES
               Container(
@@ -589,7 +626,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       blurRadius: 10,
                       color: Colors.black12,
                       offset: const Offset(0, 4),
-                    )
+                    ),
                   ],
                 ),
                 child: Column(
@@ -613,16 +650,16 @@ class _ProfilePageState extends State<ProfilePage> {
                         _saveSetting('notifications_enabled', v);
                       },
                     ),
-                    _settingSwitch(
-                      icon: Icons.dark_mode_outlined,
-                      title: "Mode sombre",
-                      subtitle: "Thème de l'application",
-                      value: darkModeEnabled,
-                      onChanged: (v) {
-                        setState(() => darkModeEnabled = v);
-                        _saveSetting('dark_mode_enabled', v);
-                      },
-                    ),
+                    // _settingSwitch(
+                    //   icon: Icons.dark_mode_outlined,
+                    //   title: "Mode sombre",
+                    //   subtitle: "Thème de l'application",
+                    //   value: darkModeEnabled,
+                    //   onChanged: (v) {
+                    //     setState(() => darkModeEnabled = v);
+                    //     _saveSetting('dark_mode_enabled', v);
+                    //   },
+                    // ),
                     _settingSwitch(
                       icon: Icons.sync_outlined,
                       title: "Synchronisation auto",
@@ -662,7 +699,11 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _infoRow({required IconData icon, required String title, required String value}) {
+  Widget _infoRow({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -672,15 +713,21 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+              Text(
+                title,
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
+              ),
               const SizedBox(height: 2),
               Text(
                 value,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -740,7 +787,10 @@ class _ProfilePageState extends State<ProfilePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(fontSize: 15)),
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
           ),
@@ -750,4 +800,3 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 }
-

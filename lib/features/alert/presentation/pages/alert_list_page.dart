@@ -31,7 +31,8 @@ class _AlertsListPageState extends State<AlertsListPage> {
   String filterEnd = '';
 
   // Pour les notifications
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   List<String> _previousAlertIds = [];
 
   @override
@@ -43,10 +44,10 @@ class _AlertsListPageState extends State<AlertsListPage> {
   }
 
   Future<void> _initializeNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(
-      android: androidSettings,
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
     );
+    const initSettings = InitializationSettings(android: androidSettings);
     await _localNotifications.initialize(
       settings: initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
@@ -99,10 +100,19 @@ class _AlertsListPageState extends State<AlertsListPage> {
       if (resp.statusCode == 200) {
         final decoded = jsonDecode(resp.body);
         final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
-        final access = data is Map ? (data['accessToken'] ?? data['access_token']) : null;
-        final refreshOut = data is Map ? (data['refreshToken'] ?? data['refresh_token']) : null;
+        final access = data is Map
+            ? (data['accessToken'] ?? data['access_token'])
+            : null;
+        final refreshOut = data is Map
+            ? (data['refreshToken'] ?? data['refresh_token'])
+            : null;
         if (access is String && access.isNotEmpty) {
-          await UserLocalService().saveTokens(access, refreshOut is String && refreshOut.isNotEmpty ? refreshOut : refresh);
+          await UserLocalService().saveTokens(
+            access,
+            refreshOut is String && refreshOut.isNotEmpty
+                ? refreshOut
+                : refresh,
+          );
           return access;
         }
       }
@@ -154,9 +164,9 @@ class _AlertsListPageState extends State<AlertsListPage> {
 
       final uri = Uri.http("197.239.116.77:3000", "/api/v1/alerts", params);
       Map<String, String> headers(String t) => {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $t',
-          };
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $t',
+      };
 
       var resp = await http.get(uri, headers: headers(token));
 
@@ -209,17 +219,24 @@ class _AlertsListPageState extends State<AlertsListPage> {
         } else if (decoded['alerts'] is List) {
           items = (decoded['alerts'] as List).cast<Map<String, dynamic>>();
         } else if (decoded['data'] is Map && decoded['data']['items'] is List) {
-          items = (decoded['data']['items'] as List).cast<Map<String, dynamic>>();
+          items = (decoded['data']['items'] as List)
+              .cast<Map<String, dynamic>>();
         }
-        final meta = decoded['pagination'] ??
-            (decoded['data'] is Map ? (decoded['data']['pagination'] ?? decoded['data']['meta']) : null);
+        final meta =
+            decoded['pagination'] ??
+            (decoded['data'] is Map
+                ? (decoded['data']['pagination'] ?? decoded['data']['meta'])
+                : null);
         if (meta is Map) {
           total = (meta['total'] ?? total) is int ? meta['total'] : total;
-          totalPages = (meta['totalPages'] ?? meta['pages'] ?? totalPages) is int
+          totalPages =
+              (meta['totalPages'] ?? meta['pages'] ?? totalPages) is int
               ? (meta['totalPages'] ?? meta['pages'])
               : totalPages;
           page = (meta['page'] ?? page) is int ? meta['page'] : page;
-          limit = (meta['limit'] ?? meta['perPage'] ?? limit) is int ? (meta['limit'] ?? meta['perPage']) : limit;
+          limit = (meta['limit'] ?? meta['perPage'] ?? limit) is int
+              ? (meta['limit'] ?? meta['perPage'])
+              : limit;
         } else if (decoded['total'] is int && decoded['totalPages'] is int) {
           total = decoded['total'];
           totalPages = decoded['totalPages'];
@@ -268,16 +285,16 @@ class _AlertsListPageState extends State<AlertsListPage> {
   Future<void> _checkForNewAlerts(List<Map<String, dynamic>> newAlerts) async {
     for (var alert in newAlerts) {
       final alertId = (alert['id'] ?? alert['_id'] ?? '').toString();
-      
+
       if (alertId.isEmpty) continue;
-      
+
       // Si c'est une vraie nouvelle alerte (pas vue avant)
       if (!_previousAlertIds.contains(alertId)) {
         await _showNotificationForAlert(alert);
         _previousAlertIds.add(alertId);
       }
     }
-    
+
     // Sauvegarder les IDs mis à jour
     await _savePreviousAlertIds();
   }
@@ -285,8 +302,9 @@ class _AlertsListPageState extends State<AlertsListPage> {
   /// Affiche une notification locale pour une nouvelle alerte
   Future<void> _showNotificationForAlert(Map<String, dynamic> alert) async {
     final title = (alert['title'] ?? 'Nouvelle Alerte').toString();
-    final message = (alert['message'] ?? 'Une nouvelle alerte a été détectée').toString();
-    
+    final message = (alert['message'] ?? 'Une nouvelle alerte a été détectée')
+        .toString();
+
     const androidDetails = AndroidNotificationDetails(
       'alerts',
       'Alertes',
@@ -296,9 +314,7 @@ class _AlertsListPageState extends State<AlertsListPage> {
       showWhen: true,
     );
 
-    const notificationDetails = NotificationDetails(
-      android: androidDetails,
-    );
+    const notificationDetails = NotificationDetails(android: androidDetails);
 
     try {
       await _localNotifications.show(
@@ -349,7 +365,8 @@ class _AlertsListPageState extends State<AlertsListPage> {
     final u = s.toUpperCase();
     if (u == 'LOW' || u == 'INFO') return Colors.yellow.shade100;
     if (u == 'MEDIUM' || u == 'MODERATE') return Colors.orange.shade100;
-    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME') return Colors.red.shade100;
+    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME')
+      return Colors.red.shade100;
     return Colors.grey.shade100;
   }
 
@@ -357,7 +374,8 @@ class _AlertsListPageState extends State<AlertsListPage> {
     final u = s.toUpperCase();
     if (u == 'LOW' || u == 'INFO') return Colors.yellow.shade700;
     if (u == 'MEDIUM' || u == 'MODERATE') return Colors.orange.shade700;
-    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME') return Colors.red.shade700;
+    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME')
+      return Colors.red.shade700;
     return Colors.grey.shade700;
   }
 
@@ -374,10 +392,7 @@ class _AlertsListPageState extends State<AlertsListPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadAlerts,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAlerts),
         ],
       ),
       body: RefreshIndicator(
@@ -401,11 +416,15 @@ class _AlertsListPageState extends State<AlertsListPage> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.red.shade200),
                   ),
-                  child: Text(error!, style: const TextStyle(color: Colors.red)),
+                  child: Text(
+                    error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
                 ),
               const SizedBox(height: 8),
               _alertsList(),
-              if (!loading && totalPages > 1 && alerts.isNotEmpty) _paginationBar(),
+              if (!loading && totalPages > 1 && alerts.isNotEmpty)
+                _paginationBar(),
             ],
           ),
         ),
@@ -419,7 +438,13 @@ class _AlertsListPageState extends State<AlertsListPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -440,46 +465,64 @@ class _AlertsListPageState extends State<AlertsListPage> {
   Widget _selectedFiltersChips() {
     final chips = <Widget>[];
     void addChip(String label, VoidCallback onClear) {
-      chips.add(InputChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        onDeleted: onClear,
-        deleteIconColor: Colors.grey,
-      ));
+      chips.add(
+        InputChip(
+          label: Text(label, style: const TextStyle(fontSize: 12)),
+          onDeleted: onClear,
+          deleteIconColor: Colors.grey,
+        ),
+      );
     }
+
     if (filterType.isNotEmpty) {
-      addChip("Type: ${_typeLabel(filterType)}", () => setState(() {
-            filterType = '';
-            page = 1;
-            _loadAlerts();
-          }));
+      addChip(
+        "Type: ${_typeLabel(filterType)}",
+        () => setState(() {
+          filterType = '';
+          page = 1;
+          _loadAlerts();
+        }),
+      );
     }
     if (filterSeverity.isNotEmpty) {
-      addChip("Sévérité: ${_severityLabel(filterSeverity)}", () => setState(() {
-            filterSeverity = '';
-            page = 1;
-            _loadAlerts();
-          }));
+      addChip(
+        "Sévérité: ${_severityLabel(filterSeverity)}",
+        () => setState(() {
+          filterSeverity = '';
+          page = 1;
+          _loadAlerts();
+        }),
+      );
     }
     if (filterStatus.isNotEmpty) {
-      addChip("Statut: ${_statusLabel(filterStatus)}", () => setState(() {
-            filterStatus = '';
-            page = 1;
-            _loadAlerts();
-          }));
+      addChip(
+        "Statut: ${_statusLabel(filterStatus)}",
+        () => setState(() {
+          filterStatus = '';
+          page = 1;
+          _loadAlerts();
+        }),
+      );
     }
     if (filterStart.isNotEmpty) {
-      addChip("Début: $filterStart", () => setState(() {
-            filterStart = '';
-            page = 1;
-            _loadAlerts();
-          }));
+      addChip(
+        "Début: $filterStart",
+        () => setState(() {
+          filterStart = '';
+          page = 1;
+          _loadAlerts();
+        }),
+      );
     }
     if (filterEnd.isNotEmpty) {
-      addChip("Fin: $filterEnd", () => setState(() {
-            filterEnd = '';
-            page = 1;
-            _loadAlerts();
-          }));
+      addChip(
+        "Fin: $filterEnd",
+        () => setState(() {
+          filterEnd = '';
+          page = 1;
+          _loadAlerts();
+        }),
+      );
     }
     if (chips.isEmpty) return const SizedBox.shrink();
     return Align(
@@ -497,7 +540,9 @@ class _AlertsListPageState extends State<AlertsListPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (ctx) {
         String selType = tempType;
         String selSeverity = tempSeverity;
@@ -520,9 +565,18 @@ class _AlertsListPageState extends State<AlertsListPage> {
                   children: [
                     Row(
                       children: [
-                        const Text("Filtres", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                        const Text(
+                          "Filtres",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         const Spacer(),
-                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -533,11 +587,12 @@ class _AlertsListPageState extends State<AlertsListPage> {
                         {'': 'Tous les types'},
                         {'FLOOD': 'Inondation'},
                         {'DROUGHT': 'Sécheresse'},
-                        {'ATTACK': 'Attaque'},
                         {'EPIDEMIC': 'Épidémie'},
-                        {'CONFLICT': 'Conflit'},
                         {'FIRE': 'Incendie'},
-                        {'WIND': 'Vents violents'},
+                        {'STORM': 'Tempête'},
+                        {'EARTHQUAKE': 'Tremblement de terre'},
+                        {'SECURITY': 'Sécurité/Conflit'},
+                        {'FAMINE': 'Famine'},
                         {'LOCUST': 'Acridiens'},
                         {'OTHER': 'Autre'},
                       ],
@@ -550,11 +605,15 @@ class _AlertsListPageState extends State<AlertsListPage> {
                       value: selSeverity,
                       items: const [
                         {'': 'Toutes les sévérités'},
+                        {'INFO': 'Info'},
                         {'LOW': 'Faible'},
-                        {'MEDIUM': 'Moyen'},
+                        {'MODERATE': 'Modéré'},
                         {'HIGH': 'Élevé'},
+                        {'CRITICAL': 'Critique'},
+                        {'EXTREME': 'Extrême'},
                       ],
-                      onChanged: (v) => setModalState(() => selSeverity = v ?? ''),
+                      onChanged: (v) =>
+                          setModalState(() => selSeverity = v ?? ''),
                       width: double.infinity,
                     ),
                     const SizedBox(height: 10),
@@ -572,7 +631,8 @@ class _AlertsListPageState extends State<AlertsListPage> {
                         {'CANCELLED': 'Annulée'},
                         {'ARCHIVED': 'Archivée'},
                       ],
-                      onChanged: (v) => setModalState(() => selStatus = v ?? ''),
+                      onChanged: (v) =>
+                          setModalState(() => selStatus = v ?? ''),
                       width: double.infinity,
                     ),
                     const SizedBox(height: 10),
@@ -645,25 +705,35 @@ class _AlertsListPageState extends State<AlertsListPage> {
   }) {
     return SizedBox(
       width: width,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 4),
-        DropdownButtonFormField<String>(
-          initialValue: value.isEmpty ? null : value,
-          isExpanded: true,
-          decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          items: items
-              .map((m) => DropdownMenuItem<String>(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 4),
+          DropdownButtonFormField<String>(
+            initialValue: value.isEmpty ? null : value,
+            isExpanded: true,
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            items: items
+                .map(
+                  (m) => DropdownMenuItem<String>(
                     value: m.keys.first.isEmpty ? '' : m.keys.first,
                     child: Text(m.values.first),
-                  ))
-              .toList(),
-          onChanged: onChanged,
-        ),
-      ]),
+                  ),
+                )
+                .toList(),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
     );
   }
 
@@ -675,19 +745,27 @@ class _AlertsListPageState extends State<AlertsListPage> {
   }) {
     return SizedBox(
       width: width,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 4),
-        TextFormField(
-          initialValue: value,
-          decoration: InputDecoration(
-            hintText: "AAAA-MM-JJ",
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 4),
+          TextFormField(
+            initialValue: value,
+            decoration: InputDecoration(
+              hintText: "AAAA-MM-JJ",
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onChanged: onChanged,
           ),
-          onChanged: onChanged,
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
@@ -704,20 +782,24 @@ class _AlertsListPageState extends State<AlertsListPage> {
       return Container(
         padding: const EdgeInsets.all(40),
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: Column(
           children: const [
             Icon(Icons.warning_amber_outlined, color: Colors.grey, size: 48),
             SizedBox(height: 12),
-            Text("Aucune alerte trouvée", style: TextStyle(color: Colors.grey, fontSize: 16)),
+            Text(
+              "Aucune alerte trouvée",
+              style: TextStyle(color: Colors.grey, fontSize: 16),
+            ),
           ],
         ),
       );
     }
 
-    return Column(
-      children: alerts.map((a) => _alertCard(a)).toList(),
-    );
+    return Column(children: alerts.map((a) => _alertCard(a)).toList());
   }
 
   Widget _alertCard(Map<String, dynamic> a) {
@@ -725,7 +807,9 @@ class _AlertsListPageState extends State<AlertsListPage> {
     final title = (a['title'] ?? 'Alerte SAP').toString();
     final message = (a['message'] ?? '').toString();
     final type = (a['type'] ?? '').toString();
-    final zone = (a['zoneName'] ?? (a['zone'] is Map ? a['zone']['name'] : '') ?? '').toString();
+    final zone =
+        (a['zoneName'] ?? (a['zone'] is Map ? a['zone']['name'] : '') ?? '')
+            .toString();
     final severity = (a['severity'] ?? '').toString();
     final status = (a['status'] ?? a['state'] ?? '').toString();
     final startDate = (a['startDate'] ?? a['createdAt'] ?? '').toString();
@@ -751,7 +835,11 @@ class _AlertsListPageState extends State<AlertsListPage> {
                       color: Colors.orange.shade50,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -760,7 +848,11 @@ class _AlertsListPageState extends State<AlertsListPage> {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -768,7 +860,10 @@ class _AlertsListPageState extends State<AlertsListPage> {
                         if (message.isNotEmpty)
                           Text(
                             message,
-                            style: const TextStyle(fontSize: 13, color: Colors.grey),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -782,8 +877,16 @@ class _AlertsListPageState extends State<AlertsListPage> {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  _badge(_statusLabel(status), _statusBg(status), _statusFg(status)),
-                  _badge(_severityLabel(severity), _severityBg(severity), _severityFg(severity)),
+                  _badge(
+                    _statusLabel(status),
+                    _statusBg(status),
+                    _statusFg(status),
+                  ),
+                  _badge(
+                    _severityLabel(severity),
+                    _severityBg(severity),
+                    _severityFg(severity),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -803,14 +906,24 @@ class _AlertsListPageState extends State<AlertsListPage> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+                  const Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(width: 4),
-                  Text(_formatDate(startDate), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    _formatDate(startDate),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                   if (type.isNotEmpty) ...[
                     const SizedBox(width: 16),
                     const Icon(Icons.category, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(_typeLabel(type), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      _typeLabel(type),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ],
                 ],
               ),
@@ -820,7 +933,10 @@ class _AlertsListPageState extends State<AlertsListPage> {
                   children: [
                     const Icon(Icons.people, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text("$affected personnes affectées", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      "$affected personnes affectées",
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ],
                 ),
               ],
@@ -834,8 +950,14 @@ class _AlertsListPageState extends State<AlertsListPage> {
   Widget _badge(String text, Color bg, Color fg) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-      child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 11)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 11),
+      ),
     );
   }
 
@@ -870,11 +992,12 @@ class _AlertsListPageState extends State<AlertsListPage> {
     const labels = {
       'FLOOD': 'Inondation',
       'DROUGHT': 'Sécheresse',
-      'ATTACK': 'Attaque',
       'EPIDEMIC': 'Épidémie',
-      'CONFLICT': 'Conflit',
       'FIRE': 'Incendie',
-      'WIND': 'Vents violents',
+      'STORM': 'Tempête',
+      'EARTHQUAKE': 'Tremblement de terre',
+      'SECURITY': 'Sécurité/Conflit',
+      'FAMINE': 'Famine',
       'LOCUST': 'Acridiens',
       'OTHER': 'Autre',
     };
@@ -883,7 +1006,10 @@ class _AlertsListPageState extends State<AlertsListPage> {
 
   void _openDetail(String id) {
     if (id.isEmpty) return;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => AlertDetailsPage(alertId: id)));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AlertDetailsPage(alertId: id)),
+    );
   }
 
   Widget _paginationBar() {
@@ -893,23 +1019,33 @@ class _AlertsListPageState extends State<AlertsListPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             "Page $page / $totalPages",
-            style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black87,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           Row(
             children: [
               TextButton(
                 onPressed: page > 1
                     ? () => setState(() {
-                          page -= 1;
-                          _loadAlerts();
-                        })
+                        page -= 1;
+                        _loadAlerts();
+                      })
                     : null,
                 child: const Text("Précédent"),
               ),
@@ -917,14 +1053,14 @@ class _AlertsListPageState extends State<AlertsListPage> {
               TextButton(
                 onPressed: page < totalPages
                     ? () => setState(() {
-                          page += 1;
-                          _loadAlerts();
-                        })
+                        page += 1;
+                        _loadAlerts();
+                      })
                     : null,
                 child: const Text("Suivant"),
               ),
             ],
-          )
+          ),
         ],
       ),
     );

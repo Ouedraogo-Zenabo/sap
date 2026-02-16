@@ -10,8 +10,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class PushNotificationService {
-  static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  static final FirebaseMessaging _firebaseMessaging =
+      FirebaseMessaging.instance;
+  static final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
 
   /// Initialise Firebase Cloud Messaging et les notifications locales
   static Future<void> initialize() async {
@@ -33,9 +35,11 @@ class PushNotificationService {
     }
 
     // Initialiser les notifications locales
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const initSettings = InitializationSettings(android: androidSettings);
-    
+
     await _localNotifications.initialize(
       settings: initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
@@ -55,13 +59,15 @@ class PushNotificationService {
     );
 
     await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(androidChannel);
 
     // Obtenir le token FCM
     final token = await _firebaseMessaging.getToken();
     debugPrint('🔑 FCM Token: $token');
-    
+
     // Envoyer ce token au serveur backend
     if (token != null) {
       await _sendTokenToServer(token);
@@ -75,20 +81,26 @@ class PushNotificationService {
 
     // Gérer les messages reçus quand l'app est au premier plan
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('📩 Message reçu (foreground): ${message.notification?.title}');
+      debugPrint(
+        '📩 Message reçu (foreground): ${message.notification?.title}',
+      );
       _showNotification(message);
     });
 
     // Gérer les messages quand l'app est en arrière-plan mais ouverte
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('📬 Message ouvert (background): ${message.notification?.title}');
+      debugPrint(
+        '📬 Message ouvert (background): ${message.notification?.title}',
+      );
       _handleNotificationTap(message);
     });
 
     // Vérifier si l'app a été ouverte depuis une notification
     final initialMessage = await _firebaseMessaging.getInitialMessage();
     if (initialMessage != null) {
-      debugPrint('🚀 App ouverte depuis notification: ${initialMessage.notification?.title}');
+      debugPrint(
+        '🚀 App ouverte depuis notification: ${initialMessage.notification?.title}',
+      );
       _handleNotificationTap(initialMessage);
     }
   }
@@ -139,17 +151,23 @@ class PushNotificationService {
   static Future<void> _sendTokenToServer(String token) async {
     try {
       debugPrint('📤 Envoi du token au serveur...');
-      
-      final prefs = await SharedPreferences.getInstance();
-      final accessToken = prefs.getString('access_token');
-      
-      if (accessToken == null || accessToken.isEmpty) {
+
+      String? accessToken;
+      try {
+        accessToken = await UserLocalService().getAccessToken();
+      } catch (_) {}
+      accessToken = (accessToken ?? '').trim();
+
+      if (accessToken.isEmpty) {
         debugPrint('⚠️ Pas de token d\'authentification, token FCM non envoyé');
         return;
       }
 
-      final response = await http.patch(  // PATCH au lieu de POST
-        Uri.parse('http://197.239.116.77:3000/api/v1/users/me/fcm-token'),  // /me/ ajouté
+      final response = await http.patch(
+        // PATCH au lieu de POST
+        Uri.parse(
+          'http://197.239.116.77:3000/api/v1/users/me/fcm-token',
+        ), // /me/ ajouté
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $accessToken',
@@ -160,7 +178,9 @@ class PushNotificationService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint('✅ Token FCM enregistré sur le serveur');
       } else {
-        debugPrint('⚠️ Erreur enregistrement token: ${response.statusCode} - ${response.body}');
+        debugPrint(
+          '⚠️ Erreur enregistrement token: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
       debugPrint('❌ Erreur envoi token: $e');

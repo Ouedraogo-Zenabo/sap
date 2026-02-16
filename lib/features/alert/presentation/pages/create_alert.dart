@@ -20,6 +20,7 @@ import 'package:mobile_app/core/utils/sms_helper.dart';
 import 'package:mobile_app/features/alert/data/sources/zones_local_service.dart';
 import 'package:mobile_app/core/utils/http_error_helper.dart';
 import 'package:mobile_app/core/utils/auth_error_dialog.dart';
+
 const bool isWeb = kIsWeb;
 
 class CreateAlertPage extends StatefulWidget {
@@ -34,10 +35,8 @@ class CreateAlertPage extends StatefulWidget {
     this.alertId,
   });
 
-
   @override
   State<CreateAlertPage> createState() => _CreateAlertPageState();
-  
 }
 
 class _CreateAlertPageState extends State<CreateAlertPage> {
@@ -55,27 +54,24 @@ class _CreateAlertPageState extends State<CreateAlertPage> {
   String? _startDateError;
 
   List<Map<String, dynamic>> regions = [];
- 
+
   List<Map<String, dynamic>> filteredProvinces = [];
   List<Map<String, dynamic>> filteredCommunes = [];
 
   final List<PlatformFile> _images = [];
   final List<PlatformFile> _videos = [];
 
-
-  
   List zones = [];
   final TextEditingController _startDateController = TextEditingController();
   final TextEditingController _startTimeController = TextEditingController();
   final TextEditingController _endDateController = TextEditingController();
   final TextEditingController _endTimeController = TextEditingController();
   final TextEditingController _otherTypeController = TextEditingController();
-  final TextEditingController _audioDescriptionController = TextEditingController();
+  final TextEditingController _audioDescriptionController =
+      TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _instructionsController = TextEditingController();
-
-  
 
   // Audio recording
   AudioRecorder? _audioRecorder;
@@ -87,12 +83,35 @@ class _CreateAlertPageState extends State<CreateAlertPage> {
   Duration _recordDuration = Duration.zero;
   String? _audioDescriptionError;
   bool _isBase64Media(String path) {
-  return path.startsWith('data:image') || path.startsWith('data:video');
-}
+    return path.startsWith('data:image') || path.startsWith('data:video');
+  }
 
- 
-  
-  
+  List<String> _collectZoneIds() {
+    final ids = <String>[];
+    final seen = <String>{};
+    for (final loc in localisations) {
+      final id = (loc["communeId"] ?? loc["provinceId"] ?? loc["regionId"])
+          ?.toString()
+          .trim();
+      if (id != null && id.isNotEmpty && !seen.contains(id)) {
+        ids.add(id);
+        seen.add(id);
+      }
+    }
+    return ids;
+  }
+
+  String _resolvePrimaryZoneId() {
+    for (final loc in localisations) {
+      final id = (loc["communeId"] ?? loc["provinceId"] ?? loc["regionId"])
+          ?.toString()
+          .trim();
+      if (id != null && id.isNotEmpty) {
+        return id;
+      }
+    }
+    return (form["zoneId"] ?? "").toString().trim();
+  }
 
   // FORM DATA
   final form = {
@@ -106,7 +125,7 @@ class _CreateAlertPageState extends State<CreateAlertPage> {
     "endDate": "",
     "endTime": "",
     "instructions": "",
-    "actionRequired": false
+    "actionRequired": false,
   };
 
   final alertTypes = [
@@ -119,7 +138,7 @@ class _CreateAlertPageState extends State<CreateAlertPage> {
     {"value": "SECURITY", "label": "Sécurité/Conflit"},
     {"value": "FAMINE", "label": "Famine"},
     {"value": "LOCUST", "label": "Invasion acridienne"},
-    {"value": "OTHER", "label": "Autre"}
+    {"value": "OTHER", "label": "Autre"},
   ];
 
   final severityLevels = [
@@ -128,121 +147,101 @@ class _CreateAlertPageState extends State<CreateAlertPage> {
     {"value": "MODERATE", "label": "Modéré"},
     {"value": "HIGH", "label": "Élevé"},
     {"value": "CRITICAL", "label": "Critique"},
-    {"value": "EXTREME", "label": "Extrême"}
+    {"value": "EXTREME", "label": "Extrême"},
   ];
 
   // Gestion des localisations multiples
-List<Map<String, dynamic>> localisations = [
-  {
-    "region": null,
-    "province": null,
-    "commune": null,
-    "provinces": [],
-    "communes": []
-  }
-];
+  List<Map<String, dynamic>> localisations = [
+    {
+      "region": null,
+      "province": null,
+      "commune": null,
+      "provinces": [],
+      "communes": [],
+    },
+  ];
 
+  void _hydrateForm(Map<String, dynamic> alert) {
+    form["title"] = alert["title"] ?? "";
+    form["message"] = alert["message"] ?? "";
+    form["instructions"] = alert["instructions"] ?? "";
+    form["type"] = alert["type"];
+    form["severity"] = alert["severity"];
+    form["zoneId"] = alert["zone"]?["id"] ?? alert["zoneId"];
+    form["actionRequired"] = alert["actionRequired"] ?? false;
 
-
-void _hydrateForm(Map<String, dynamic> alert) {
-  form["title"] = alert["title"] ?? "";
-  form["message"] = alert["message"] ?? "";
-  form["instructions"] = alert["instructions"] ?? "";
-  form["type"] = alert["type"];
-  form["severity"] = alert["severity"];
-  form["zoneId"] = alert["zone"]?["id"] ?? alert["zoneId"];
-  form["actionRequired"] = alert["actionRequired"] ?? false;
-
-  _titleController.text = form["title"] as String;
-  _messageController.text = form["message"] as String;
-  _instructionsController.text = form["instructions"] as String;
-}
-
-
-
-
-// Liste pour stocker les régions depuis l'API
-List<Map<String, dynamic>> regionsApi = [];
-
-
-@override
-void initState() {
-  super.initState();
-
-  _loadZones();
-  _loadRegions();
-
-  if (!kIsWeb) {
-    _audioRecorder = AudioRecorder();
-    _audioPlayer = AudioPlayer();
-    _setupAudioPlayer();
+    _titleController.text = form["title"] as String;
+    _messageController.text = form["message"] as String;
+    _instructionsController.text = form["instructions"] as String;
   }
 
-  final alert = widget.existingAlert;
+  // Liste pour stocker les régions depuis l'API
+  List<Map<String, dynamic>> regionsApi = [];
 
-  if (widget.isEditMode && alert != null) {
-    _hydrateForm(alert);
+  @override
+  void initState() {
+    super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _initLocalisationFromAlert(alert);
-    });
-  }
+    _loadZones();
+    _loadRegions();
 
-  if (alert != null) {
-  form["title"] = alert["title"] ?? "";
-  form["message"] = alert["message"] ?? "";
-  form["instructions"] = alert["instructions"] ?? "";
-  form["type"] = alert["type"];
-  form["severity"] = alert["severity"];
-  form["zoneId"] = alert["zone"]?["id"] ?? alert["zoneId"];
-  form["actionRequired"] = alert["actionRequired"] ?? false;
-  _titleController.text = form["title"] as String;
-  _messageController.text = form["message"] as String;
-  _instructionsController.text = form["instructions"] as String;
-
-  if (alert["startDate"] != null) {
-    final start = DateTime.tryParse(alert["startDate"]);
-    if (start != null) {
-      form["startDate"] = start.toIso8601String().split("T")[0];
-      _startDateController.text = form["startDate"]?.toString() ?? "";
+    if (!kIsWeb) {
+      _audioRecorder = AudioRecorder();
+      _audioPlayer = AudioPlayer();
+      _setupAudioPlayer();
     }
-  }
 
-  if (alert["endDate"] != null) {
-    final end = DateTime.tryParse(alert["endDate"]);
-    if (end != null) {
-      form["endDate"] = end.toIso8601String().split("T")[0];
-      _endDateController.text = form["endDate"]?.toString() ?? "";
-    }
-  }
+    final alert = widget.existingAlert;
 
+    if (widget.isEditMode && alert != null) {
+      _hydrateForm(alert);
 
-  
-
-}
-
-
-
-
-
-
-
- 
-
-}
-
-  void _setupAudioPlayer() {
-  if (_audioPlayer == null) return;
-
-  _audioPlayer!.onPlayerStateChanged.listen((state) {
-    if (mounted) {
-      setState(() {
-        _isPlaying = state == PlayerState.playing;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _initLocalisationFromAlert(alert);
       });
     }
-  });
-}
 
+    if (alert != null) {
+      form["title"] = alert["title"] ?? "";
+      form["message"] = alert["message"] ?? "";
+      form["instructions"] = alert["instructions"] ?? "";
+      form["type"] = alert["type"];
+      form["severity"] = alert["severity"];
+      form["zoneId"] = alert["zone"]?["id"] ?? alert["zoneId"];
+      form["actionRequired"] = alert["actionRequired"] ?? false;
+      _titleController.text = form["title"] as String;
+      _messageController.text = form["message"] as String;
+      _instructionsController.text = form["instructions"] as String;
+
+      if (alert["startDate"] != null) {
+        final start = DateTime.tryParse(alert["startDate"]);
+        if (start != null) {
+          form["startDate"] = start.toIso8601String().split("T")[0];
+          _startDateController.text = form["startDate"]?.toString() ?? "";
+        }
+      }
+
+      if (alert["endDate"] != null) {
+        final end = DateTime.tryParse(alert["endDate"]);
+        if (end != null) {
+          form["endDate"] = end.toIso8601String().split("T")[0];
+          _endDateController.text = form["endDate"]?.toString() ?? "";
+        }
+      }
+    }
+  }
+
+  void _setupAudioPlayer() {
+    if (_audioPlayer == null) return;
+
+    _audioPlayer!.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = state == PlayerState.playing;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -264,7 +263,7 @@ void initState() {
     }
   }
 
-    // GET ZONES
+  // GET ZONES
   Future<void> _loadZones() async {
     setState(() => zonesLoading = true);
 
@@ -276,7 +275,8 @@ void initState() {
       if (localCommunes.isNotEmpty) {
         setState(() {
           zones = localCommunes;
-          if (zones.isNotEmpty && (form["zoneId"] == null || form["zoneId"].toString().isEmpty)) {
+          if (zones.isNotEmpty &&
+              (form["zoneId"] == null || form["zoneId"].toString().isEmpty)) {
             form["zoneId"] = zones[0]["id"];
           }
           zonesLoading = false;
@@ -303,7 +303,8 @@ void initState() {
         if (synced.isNotEmpty) {
           setState(() {
             zones = synced;
-            if (zones.isNotEmpty && (form["zoneId"] == null || form["zoneId"].toString().isEmpty)) {
+            if (zones.isNotEmpty &&
+                (form["zoneId"] == null || form["zoneId"].toString().isEmpty)) {
               form["zoneId"] = zones[0]["id"];
             }
             zonesLoading = false;
@@ -335,218 +336,225 @@ void initState() {
     }
   }
 
+  Future<void> _restoreLocationFromZone(Map<String, dynamic> zone) async {
+    final loc = localisations.first;
 
-Future<void> _restoreLocationFromZone(Map<String, dynamic> zone) async {
-  final loc = localisations.first;
+    // Cas COMMUNE (le plus courant)
+    if (zone["type"] == "COMMUNE") {
+      final communeId = zone["id"];
+      final provinceId = zone["parentId"];
 
-  // Cas COMMUNE (le plus courant)
-  if (zone["type"] == "COMMUNE") {
-    final communeId = zone["id"];
-    final provinceId = zone["parentId"];
+      loc["provinceId"] = provinceId;
+      await _loadCommunesForLoc(loc, provinceId);
 
-    loc["provinceId"] = provinceId;
-    await _loadCommunesForLoc(loc, provinceId);
+      loc["communeId"] = communeId;
 
-    loc["communeId"] = communeId;
+      final province = loc["communes"].firstWhere((c) => c["id"] == communeId);
+      final regionId = province["parentId"];
 
-    final province =
-        loc["communes"].firstWhere((c) => c["id"] == communeId);
-    final regionId = province["parentId"];
+      loc["regionId"] = regionId;
+      await _loadProvincesForLoc(loc, regionId);
 
-    loc["regionId"] = regionId;
-    await _loadProvincesForLoc(loc, regionId);
-
-    if (mounted) setState(() {});
+      if (mounted) setState(() {});
+    }
   }
-}
 
-
-Future<void> _loadRegions() async {
-  try {
-    final zonesService = ZonesLocalService();
-    await zonesService.init();
-
-    // Read regions from local DB first
-    final localRegions = await zonesService.getRegions();
-    if (localRegions.isNotEmpty) {
-      setState(() {
-        regions = localRegions.map((e) => Map<String, dynamic>.from(e)).toList();
-      });
-    }
-
-    // If no local regions, or to refresh, attempt sync using token
-    final token = await _getAccessTokenFromProfile();
-    if (token == null || token.isEmpty) {
-      if (localRegions.isEmpty) {
-        print("❌ Token manquant pour charger régions");
-      }
-      return;
-    }
-
+  Future<void> _loadRegions() async {
     try {
-      await zonesService.syncAllZones(token);
-      final synced = await zonesService.getRegions();
-      if (synced.isNotEmpty) {
+      final zonesService = ZonesLocalService();
+      await zonesService.init();
+
+      // Read regions from local DB first
+      final localRegions = await zonesService.getRegions();
+      if (localRegions.isNotEmpty) {
         setState(() {
-          regions = synced.map((e) => Map<String, dynamic>.from(e)).toList();
+          regions = localRegions
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
         });
       }
-    } catch (e) {
-      print('Regions sync failed: $e');
-    }
-  } catch (e) {
-    print("❌ Erreur chargement régions: $e");
-  }
-}
 
-
-
-
-Future<void> _initLocalisationFromAlert(Map<String, dynamic> alert) async {
-  final zone = alert["zone"];
-  if (zone == null) return;
-
-  final regionId = zone["regionId"]?.toString();
-  final provinceId = zone["provinceId"]?.toString();
-  final communeId = zone["id"]?.toString();
-
-  if (regionId == null) return;
-
-  localisations = [
-    {
-      "regionId": regionId,
-      "provinceId": provinceId,
-      "communeId": communeId,
-      "provinces": [],
-      "communes": []
-    }
-  ];
-
-  await _loadProvincesForLoc(localisations[0], regionId);
-
-  if (provinceId != null) {
-    await _loadCommunesForLoc(localisations[0], provinceId);
-  }
-
-  setState(() {});
-}
-
-
-
-Future<void> _loadProvincesForLoc(
-  Map<String, dynamic> loc,
-  String regionId,
-) async {
-  try {
-    final zonesService = ZonesLocalService();
-    await zonesService.init();
-
-    // Try local provinces first
-    final localProvinces = await zonesService.getProvinces(regionId);
-    if (localProvinces.isNotEmpty) {
-      setState(() => loc['provinces'] = localProvinces.map((e) => Map<String, dynamic>.from(e)).toList());
-      return;
-    }
-
-    // Fallback: try syncing and re-read
-    final token = await _getAccessTokenFromProfile();
-    if (token != null && token.isNotEmpty) {
-      try {
-        await zonesService.syncAllZones(token);
-        final synced = await zonesService.getProvinces(regionId);
-        if (synced.isNotEmpty) {
-          setState(() => loc['provinces'] = synced.map((e) => Map<String, dynamic>.from(e)).toList());
-          return;
+      // If no local regions, or to refresh, attempt sync using token
+      final token = await _getAccessTokenFromProfile();
+      if (token == null || token.isEmpty) {
+        if (localRegions.isEmpty) {
+          print("❌ Token manquant pour charger régions");
         }
-      } catch (e) {
-        print('Provinces sync error: $e');
-      }
-    }
-  } catch (e) {
-    print('Erreur chargement provinces: $e');
-  }
-}
-
-
-Future<void> _loadCommunesForLoc(
-  Map<String, dynamic> loc,
-  String provinceId,
-) async {
-  try {
-    final zonesService = ZonesLocalService();
-    await zonesService.init();
-
-    final localCommunes = await zonesService.getCommunes(provinceId);
-    if (localCommunes.isNotEmpty) {
-      setState(() => loc['communes'] = localCommunes.map((e) => Map<String, dynamic>.from(e)).toList());
-      return;
-    }
-
-    final token = await _getAccessTokenFromProfile();
-    if (token != null && token.isNotEmpty) {
-      try {
-        await zonesService.syncAllZones(token);
-        final synced = await zonesService.getCommunes(provinceId);
-        if (synced.isNotEmpty) {
-          setState(() => loc['communes'] = synced.map((e) => Map<String, dynamic>.from(e)).toList());
-          return;
-        }
-      } catch (e) {
-        print('Communes sync error: $e');
-      }
-    }
-  } catch (e) {
-    print('Erreur chargement communes: $e');
-  }
-}
-
-
-
-
-
-MediaType? _getMediaType(String filePath) {
-  final ext = filePath.split('.').last.toLowerCase();
-
-  switch (ext) {
-    // Images
-    case 'png':
-      return MediaType('image', 'png');
-    case 'jpg':
-    case 'jpeg':
-      return MediaType('image', 'jpeg');
-    case 'gif':
-      return MediaType('image', 'gif');
-
-    // Vidéos
-    case 'mp4':
-      return MediaType('video', 'mp4');
-    case 'webm':
-      return MediaType('video', 'webm');
-    case 'mov':
-      return MediaType('video', 'quicktime');
-
-    // Audio
-    case 'mp3':
-      return MediaType('audio', 'mpeg');
-    case 'm4a':
-      return MediaType('audio', 'mp4');
-    case 'wav':
-      return MediaType('audio', 'wav');
-    case 'ogg':
-      return MediaType('audio', 'ogg');
-
-    default:
-      return MediaType('application', 'octet-stream');
-  }
-}
-
-
-    // Audio recording functions
-  Future<void> _startRecording() async {
-          if (kIsWeb) {
-        setState(() => errorMessage = "L'enregistrement audio n'est pas disponible sur le Web");
         return;
       }
+
+      try {
+        await zonesService.syncAllZones(token);
+        final synced = await zonesService.getRegions();
+        if (synced.isNotEmpty) {
+          setState(() {
+            regions = synced.map((e) => Map<String, dynamic>.from(e)).toList();
+          });
+        }
+      } catch (e) {
+        print('Regions sync failed: $e');
+      }
+    } catch (e) {
+      print("❌ Erreur chargement régions: $e");
+    }
+  }
+
+  Future<void> _initLocalisationFromAlert(Map<String, dynamic> alert) async {
+    final zone = alert["zone"];
+    if (zone == null) return;
+
+    final regionId = zone["regionId"]?.toString();
+    final provinceId = zone["provinceId"]?.toString();
+    final communeId = zone["id"]?.toString();
+
+    if (regionId == null) return;
+
+    localisations = [
+      {
+        "regionId": regionId,
+        "provinceId": provinceId,
+        "communeId": communeId,
+        "provinces": [],
+        "communes": [],
+      },
+    ];
+
+    await _loadProvincesForLoc(localisations[0], regionId);
+
+    if (provinceId != null) {
+      await _loadCommunesForLoc(localisations[0], provinceId);
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _loadProvincesForLoc(
+    Map<String, dynamic> loc,
+    String regionId,
+  ) async {
+    try {
+      final zonesService = ZonesLocalService();
+      await zonesService.init();
+
+      // Try local provinces first
+      final localProvinces = await zonesService.getProvinces(regionId);
+      if (localProvinces.isNotEmpty) {
+        setState(
+          () => loc['provinces'] = localProvinces
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(),
+        );
+        return;
+      }
+
+      // Fallback: try syncing and re-read
+      final token = await _getAccessTokenFromProfile();
+      if (token != null && token.isNotEmpty) {
+        try {
+          await zonesService.syncAllZones(token);
+          final synced = await zonesService.getProvinces(regionId);
+          if (synced.isNotEmpty) {
+            setState(
+              () => loc['provinces'] = synced
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList(),
+            );
+            return;
+          }
+        } catch (e) {
+          print('Provinces sync error: $e');
+        }
+      }
+    } catch (e) {
+      print('Erreur chargement provinces: $e');
+    }
+  }
+
+  Future<void> _loadCommunesForLoc(
+    Map<String, dynamic> loc,
+    String provinceId,
+  ) async {
+    try {
+      final zonesService = ZonesLocalService();
+      await zonesService.init();
+
+      final localCommunes = await zonesService.getCommunes(provinceId);
+      if (localCommunes.isNotEmpty) {
+        setState(
+          () => loc['communes'] = localCommunes
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(),
+        );
+        return;
+      }
+
+      final token = await _getAccessTokenFromProfile();
+      if (token != null && token.isNotEmpty) {
+        try {
+          await zonesService.syncAllZones(token);
+          final synced = await zonesService.getCommunes(provinceId);
+          if (synced.isNotEmpty) {
+            setState(
+              () => loc['communes'] = synced
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList(),
+            );
+            return;
+          }
+        } catch (e) {
+          print('Communes sync error: $e');
+        }
+      }
+    } catch (e) {
+      print('Erreur chargement communes: $e');
+    }
+  }
+
+  MediaType? _getMediaType(String filePath) {
+    final ext = filePath.split('.').last.toLowerCase();
+
+    switch (ext) {
+      // Images
+      case 'png':
+        return MediaType('image', 'png');
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'gif':
+        return MediaType('image', 'gif');
+
+      // Vidéos
+      case 'mp4':
+        return MediaType('video', 'mp4');
+      case 'webm':
+        return MediaType('video', 'webm');
+      case 'mov':
+        return MediaType('video', 'quicktime');
+
+      // Audio
+      case 'mp3':
+        return MediaType('audio', 'mpeg');
+      case 'm4a':
+        return MediaType('audio', 'mp4');
+      case 'wav':
+        return MediaType('audio', 'wav');
+      case 'ogg':
+        return MediaType('audio', 'ogg');
+
+      default:
+        return MediaType('application', 'octet-stream');
+    }
+  }
+
+  // Audio recording functions
+  Future<void> _startRecording() async {
+    if (kIsWeb) {
+      setState(
+        () => errorMessage =
+            "L'enregistrement audio n'est pas disponible sur le Web",
+      );
+      return;
+    }
 
     try {
       final status = await Permission.microphone.request();
@@ -556,7 +564,8 @@ MediaType? _getMediaType(String filePath) {
       }
 
       final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path =
+          '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
       await _audioRecorder!.start(const RecordConfig(), path: path);
       setState(() {
@@ -572,7 +581,9 @@ MediaType? _getMediaType(String filePath) {
       });
     } catch (e) {
       debugPrint("Error starting recording: $e");
-      setState(() => errorMessage = "Erreur lors du démarrage de l'enregistrement: $e");
+      setState(
+        () => errorMessage = "Erreur lors du démarrage de l'enregistrement: $e",
+      );
     }
   }
 
@@ -586,7 +597,9 @@ MediaType? _getMediaType(String filePath) {
       debugPrint("Recording saved at: $path");
     } catch (e) {
       debugPrint("Error stopping recording: $e");
-      setState(() => errorMessage = "Erreur lors de l'arrêt de l'enregistrement: $e");
+      setState(
+        () => errorMessage = "Erreur lors de l'arrêt de l'enregistrement: $e",
+      );
     }
   }
 
@@ -614,132 +627,123 @@ MediaType? _getMediaType(String filePath) {
     });
   }
 
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "$minutes:$seconds";
+  }
 
   // 📅 Sélection de date
-Future<void> _pickDate({required bool isStart}) async {
-  final picked = await showDatePicker(
-    context: context,
-    initialDate: DateTime.now(),
-    firstDate: DateTime(2020),
-    lastDate: DateTime(2100),
-  );
-
-  if (picked != null) {
-    final formatted = picked.toIso8601String().split("T")[0];
-    setState(() {
-      if (isStart) {
-        form["startDate"] = formatted;
-        _startDateController.text = formatted;
-      } else {
-        form["endDate"] = formatted;
-      }
-    });
-  }
-}
-
-// ⏰ Sélection de l’heure
-Future<void> _pickTime({required bool isStart}) async {
-  final picked = await showTimePicker(
-    context: context,
-    initialTime: TimeOfDay.now(),
-  );
-
-  if (picked != null) {
-    final formatted =
-        "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
-    setState(() {
-      if (isStart) {
-        form["startTime"] = formatted;
-      } else {
-        form["endTime"] = formatted;
-      }
-    });
-  }
-}
-
-/// Galerie images (Web + Mobile)
-  Future<void> _pickImages() async {
-  if (kIsWeb) {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.image,
-      withData: true,
+  Future<void> _pickDate({required bool isStart}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
     );
 
-    if (result != null) {
-      setState(() => _images.addAll(result.files));
+    if (picked != null) {
+      final formatted = picked.toIso8601String().split("T")[0];
+      setState(() {
+        if (isStart) {
+          form["startDate"] = formatted;
+          _startDateController.text = formatted;
+        } else {
+          form["endDate"] = formatted;
+        }
+      });
     }
-    return;
   }
 
-  final picker = ImagePicker();
-  final images = await picker.pickMultiImage(imageQuality: 70);
-
-  if (images.isEmpty) return;
-
-  setState(() {
-    _images.addAll(
-      images.map((img) => PlatformFile(
-        name: img.name,
-        path: img.path,
-        size: 0,
-      )),
+  // ⏰ Sélection de l’heure
+  Future<void> _pickTime({required bool isStart}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
     );
-  });
-}
 
+    if (picked != null) {
+      final formatted =
+          "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+      setState(() {
+        if (isStart) {
+          form["startTime"] = formatted;
+        } else {
+          form["endTime"] = formatted;
+        }
+      });
+    }
+  }
 
+  /// Galerie images (Web + Mobile)
+  Future<void> _pickImages() async {
+    if (kIsWeb) {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.image,
+        withData: true,
+      );
+
+      if (result != null) {
+        setState(() => _images.addAll(result.files));
+      }
+      return;
+    }
+
+    final picker = ImagePicker();
+    final images = await picker.pickMultiImage(imageQuality: 70);
+
+    if (images.isEmpty) return;
+
+    setState(() {
+      _images.addAll(
+        images.map(
+          (img) => PlatformFile(name: img.name, path: img.path, size: 0),
+        ),
+      );
+    });
+  }
 
   /// Caméra (Mobile uniquement)
   Future<void> _takePhoto() async {
-  if (kIsWeb) {
-    setState(() => errorMessage = "Caméra indisponible sur le Web");
-    return;
-  }
+    if (kIsWeb) {
+      setState(() => errorMessage = "Caméra indisponible sur le Web");
+      return;
+    }
 
-  final status = await Permission.camera.request();
-  if (!status.isGranted) {
-    setState(() => errorMessage = "Permission caméra refusée");
-    return;
-  }
+    final status = await Permission.camera.request();
+    if (!status.isGranted) {
+      setState(() => errorMessage = "Permission caméra refusée");
+      return;
+    }
 
-  final picker = ImagePicker();
-  final XFile? photo = await picker.pickImage(
-    source: ImageSource.camera,
-    imageQuality: 70,
-  );
-
-  if (photo == null) return;
-
-  setState(() {
-    _images.add(
-      PlatformFile(
-        name: photo.name,
-        path: photo.path,
-        size: 0,
-      ),
+    final picker = ImagePicker();
+    final XFile? photo = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 70,
     );
-  });
-}
 
+    if (photo == null) return;
 
+    setState(() {
+      _images.add(PlatformFile(name: photo.name, path: photo.path, size: 0));
+    });
+  }
 
   /// Vidéos (Web + Mobile)
   Future<void> _pickVideos() async {
-  final result = await FilePicker.platform.pickFiles(
-    allowMultiple: true,
-    type: FileType.video,
-    withData: kIsWeb,
-  );
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.video,
+      withData: kIsWeb,
+    );
 
-  if (result == null) return;
+    if (result == null) return;
 
-  setState(() {
-    _videos.addAll(result.files);
-  });
-}
-
-
+    setState(() {
+      _videos.addAll(result.files);
+    });
+  }
 
   // POST alert
   Future<void> _submitAlert(String status) async {
@@ -747,9 +751,17 @@ Future<void> _pickTime({required bool isStart}) async {
     print("Form data: $form");
     print("canSubmit value: $canSubmit");
 
+    final zoneIds = _collectZoneIds();
+    final primaryZoneId = _resolvePrimaryZoneId();
+    final hasAllRegions = localisations.every((loc) {
+      final regionId = (loc["regionId"] ?? '').toString().trim();
+      return regionId.isNotEmpty;
+    });
 
-
-    if (!canSubmit) {
+    if (!canSubmit ||
+        !hasAllRegions ||
+        (form["type"] == "OTHER" &&
+            (_otherTypeController.text.trim().isEmpty))) {
       // Set individual field errors
       setState(() {
         if (form["title"].toString().trim().isEmpty) {
@@ -764,7 +776,7 @@ Future<void> _pickTime({required bool isStart}) async {
           _messageError = "Le message doit contenir au moins 10 caractères";
         }
 
-        if ((form["zoneId"] ?? "").toString().isEmpty) {
+        if (primaryZoneId.isEmpty) {
           _zoneError = "La région est obligatoire";
         }
 
@@ -772,7 +784,19 @@ Future<void> _pickTime({required bool isStart}) async {
           _startDateError = "La date de début est obligatoire";
         }
 
-        errorMessage = "⚠️ Veuillez remplir tous les champs obligatoires marqués d'une étoile (*)";
+        if (!hasAllRegions) {
+          _zoneError =
+              "Toutes les localisations doivent avoir au moins une région";
+        }
+
+        if (form["type"] == "OTHER" &&
+            _otherTypeController.text.trim().isEmpty) {
+          errorMessage =
+              "⚠️ Veuillez préciser le type d'alerte lorsque vous choisissez 'Autre'.";
+        }
+
+        errorMessage =
+            "⚠️ Veuillez remplir tous les champs obligatoires marqués d'une étoile (*)";
       });
       if (!mounted) return;
 
@@ -785,19 +809,30 @@ Future<void> _pickTime({required bool isStart}) async {
     });
 
     // Combiner dates et préparer payload
-    final startDateTime = _combineDateTime(form["startDate"] as String?, form["startTime"] as String?);
+    final startDateTime = _combineDateTime(
+      form["startDate"] as String?,
+      form["startTime"] as String?,
+    );
     final endDateTime = (form["endDate"] ?? "").toString().isNotEmpty
-        ? _combineDateTime(form["endDate"] as String?, form["endTime"] as String?)
+        ? _combineDateTime(
+            form["endDate"] as String?,
+            form["endTime"] as String?,
+          )
         : null;
 
     final data = {
       "title": form["title"],
       "message": form["message"],
       "type": form["type"],
+      if (form["type"] == "OTHER" &&
+          _otherTypeController.text.trim().isNotEmpty)
+        "customType": _otherTypeController.text.trim(),
       "severity": form["severity"],
-      "zoneId": form["zoneId"],
+      "zoneId": primaryZoneId,
+      if (zoneIds.length > 1) "zoneIds": zoneIds,
       "startDate": startDateTime,
-      if (endDateTime != null) "endDate": endDateTime,  // Optionnel - inclure seulement si présent
+      if (endDateTime != null)
+        "endDate": endDateTime, // Optionnel - inclure seulement si présent
       "instructions": form["instructions"],
       "actionRequired": form["actionRequired"],
       "status": status,
@@ -817,7 +852,9 @@ Future<void> _pickTime({required bool isStart}) async {
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('📴 Pas de connexion. Alerte sauvegardée localement.'),
+              content: Text(
+                '📴 Pas de connexion. Alerte sauvegardée localement.',
+              ),
               backgroundColor: Colors.orange,
               duration: Duration(seconds: 2),
             ),
@@ -856,13 +893,11 @@ Future<void> _pickTime({required bool isStart}) async {
 
     final isEdit = widget.isEditMode && widget.existingAlert != null;
 
-final alertId = isEdit
-    ? widget.existingAlert!["id"]
-    : null;
+    final alertId = isEdit ? widget.existingAlert!["id"] : null;
 
-final url = isEdit
-    ? Uri.parse("http://197.239.116.77:3000/api/v1/alerts/$alertId")
-    : Uri.parse("http://197.239.116.77:3000/api/v1/alerts");
+    final url = isEdit
+        ? Uri.parse("http://197.239.116.77:3000/api/v1/alerts/$alertId")
+        : Uri.parse("http://197.239.116.77:3000/api/v1/alerts");
 
     try {
       final token = await _getAccessTokenFromProfile();
@@ -871,64 +906,68 @@ final url = isEdit
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
       form.removeWhere(
-  (key, value) => (value is String && value.trim().isEmpty),
-);
+        (key, value) => (value is String && value.trim().isEmpty),
+      );
 
-data.removeWhere(
-  (key, value) => value == null || (value is String && value.trim().isEmpty),
-);
-if (!widget.isEditMode) {
-  data.remove('status');
-}
+      data.removeWhere(
+        (key, value) =>
+            value == null || (value is String && value.trim().isEmpty),
+      );
+      if (!widget.isEditMode) {
+        data.remove('status');
+      }
 
-late http.Response response;
+      late http.Response response;
 
-if (widget.isEditMode && widget.existingAlert != null) {
-  final alertId = widget.existingAlert!['id'].toString();
+      if (widget.isEditMode && widget.existingAlert != null) {
+        final alertId = widget.existingAlert!['id'].toString();
 
-  response = await http.put(
-    Uri.parse("http://197.239.116.77:3000/api/v1/alerts/$alertId"),
-    headers: headers,
-    body: jsonEncode(data),
-  );
-} else {
-  response = await http.post(
-    Uri.parse("http://197.239.116.77:3000/api/v1/alerts"),
-    headers: headers,
-    body: jsonEncode(data),
-  );
-}
-if (response.statusCode == 200) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    Navigator.pop(context);
-  });
-}
-
-    
+        response = await http.put(
+          Uri.parse("http://197.239.116.77:3000/api/v1/alerts/$alertId"),
+          headers: headers,
+          body: jsonEncode(data),
+        );
+      } else {
+        response = await http.post(
+          Uri.parse("http://197.239.116.77:3000/api/v1/alerts"),
+          headers: headers,
+          body: jsonEncode(data),
+        );
+      }
+      if (response.statusCode == 200) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.pop(context);
+        });
+      }
 
       print("API Response status: ${response.statusCode}");
       print("API Response body: ${response.body}");
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-  final respJson = jsonDecode(response.body);
+        final respJson = jsonDecode(response.body);
 
-  final alertData = respJson['data'];
-  if (alertData == null || alertData['id'] == null) {
-    throw Exception("Alerte créée mais ID manquant");
-  }
+        final alertData = respJson['data'];
+        if (alertData == null || alertData['id'] == null) {
+          throw Exception("Alerte créée mais ID manquant");
+        }
 
-  final alertId = alertData['id'].toString();
+        final alertId = alertData['id'].toString();
 
-  // 🔴 IMPORTANT : uploader les médias UNIQUEMENT si SUBMITTED
-  if (status == "SUBMITTED") {
-    await _uploadMediaForAlert(alertId, token!);
-  }
+        // 🔴 IMPORTANT : uploader les médias UNIQUEMENT si SUBMITTED
+        if (status == "SUBMITTED") {
+          await _uploadMediaForAlert(alertId, token!);
+        }
 
-  if (mounted) Navigator.pop(context, true);
+        if (mounted) Navigator.pop(context, true);
       } else if (response.statusCode == 401 || response.statusCode == 403) {
         if (mounted) await showAuthExpiredDialog(context);
       } else {
-        setState(() => errorMessage = httpErrorMessage(response.statusCode, response.body));
+        setState(
+          () => errorMessage = httpErrorMessage(
+            response.statusCode,
+            response.body,
+          ),
+        );
       }
     } catch (e) {
       print("ERROR: Erreur réseau - $e");
@@ -936,12 +975,7 @@ if (response.statusCode == 200) {
     } finally {
       if (mounted) setState(() => loading = false);
     }
-}
-
-
-    
-  
-  
+  }
 
   // Upload media for a created alert id
   Future<void> _uploadMediaForAlert(String alertId, String token) async {
@@ -951,145 +985,144 @@ if (response.statusCode == 200) {
       final hasVideo = _videos.isNotEmpty;
       final hasAudio = _audioPath != null && _audioPath!.isNotEmpty;
 
-      debugPrint('📊 Média check: hasImage=$hasImage, hasVideo=$hasVideo, hasAudio=$hasAudio');
+      debugPrint(
+        '📊 Média check: hasImage=$hasImage, hasVideo=$hasVideo, hasAudio=$hasAudio',
+      );
 
       if (!hasImage && !hasVideo && !hasAudio) {
         debugPrint('✅ Aucun média à uploader');
         return;
       }
 
-      final mediaUrl = Uri.parse('http://197.239.116.77:3000/api/v1/alerts/$alertId/attachments');
+      final mediaUrl = Uri.parse(
+        'http://197.239.116.77:3000/api/v1/alerts/$alertId/attachments',
+      );
       final request = http.MultipartRequest('POST', mediaUrl);
       request.headers['Authorization'] = 'Bearer $token';
 
       // Image (prendre la première)
       if (hasImage) {
-  final img = _images.first;
-  debugPrint('📷 Image: name=${img.name}, path=${img.path}, isWeb=$isWeb');
+        final img = _images.first;
+        debugPrint(
+          '📷 Image: name=${img.name}, path=${img.path}, isWeb=$isWeb',
+        );
 
-  // 🌐 WEB → bytes
-  if (kIsWeb && img.bytes != null) {
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        'image',
-        img.bytes!,
-        filename: img.name,
-        contentType: _getMediaType(img.name),
-      ),
-    );
-  }
+        // 🌐 WEB → bytes
+        if (kIsWeb && img.bytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'image',
+              img.bytes!,
+              filename: img.name,
+              contentType: _getMediaType(img.name),
+            ),
+          );
+        }
+        // 📱 MOBILE
+        else if (img.path != null) {
+          // ✅ BASE64
+          if (_isBase64Media(img.path!)) {
+            final base64Data = img.path!.split(',').last;
+            final bytes = base64Decode(base64Data);
 
-  // 📱 MOBILE
-  else if (img.path != null) {
-    // ✅ BASE64
-    if (_isBase64Media(img.path!)) {
-      final base64Data = img.path!.split(',').last;
-      final bytes = base64Decode(base64Data);
-
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'image',
-          bytes,
-          filename: img.name,
-          contentType: _getMediaType(img.name),
-        ),
-      );
-    }
-
-    // ✅ FICHIER NORMAL
-    else {
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'image',
-          img.path!,
-          contentType: _getMediaType(img.path!),
-        ),
-      );
-    }
-  }
-}
-
-      
+            request.files.add(
+              http.MultipartFile.fromBytes(
+                'image',
+                bytes,
+                filename: img.name,
+                contentType: _getMediaType(img.name),
+              ),
+            );
+          }
+          // ✅ FICHIER NORMAL
+          else {
+            request.files.add(
+              await http.MultipartFile.fromPath(
+                'image',
+                img.path!,
+                contentType: _getMediaType(img.path!),
+              ),
+            );
+          }
+        }
+      }
 
       // Video (prendre la première)
       // ================= VIDEO =================
-if (_videos.isNotEmpty) {
-  final video = _videos.first;
-  debugPrint('🎥 Video: name=${video.name}, path=${video.path}');
+      if (_videos.isNotEmpty) {
+        final video = _videos.first;
+        debugPrint('🎥 Video: name=${video.name}, path=${video.path}');
 
-  // 🌐 WEB
-  if (kIsWeb && video.bytes != null) {
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        'video',
-        video.bytes!,
-        filename: video.name,
-        contentType: _getMediaType(video.name),
-      ),
-    );
-  }
+        // 🌐 WEB
+        if (kIsWeb && video.bytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'video',
+              video.bytes!,
+              filename: video.name,
+              contentType: _getMediaType(video.name),
+            ),
+          );
+        }
+        // 📱 MOBILE
+        else if (video.path != null) {
+          // ✅ VIDEO BASE64
+          if (_isBase64Media(video.path!)) {
+            final base64Data = video.path!.split(',').last;
+            final bytes = base64Decode(base64Data);
 
-  // 📱 MOBILE
-  else if (video.path != null) {
-    // ✅ VIDEO BASE64
-    if (_isBase64Media(video.path!)) {
-      final base64Data = video.path!.split(',').last;
-      final bytes = base64Decode(base64Data);
-
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'video',
-          bytes,
-          filename: video.name,
-          contentType: _getMediaType(video.name),
-        ),
-      );
-    }
-
-    // ✅ VIDEO FICHIER LOCAL
-    else {
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'video',
-          video.path!,
-          contentType: _getMediaType(video.path!),
-        ),
-      );
-    }
-  }
-}
+            request.files.add(
+              http.MultipartFile.fromBytes(
+                'video',
+                bytes,
+                filename: video.name,
+                contentType: _getMediaType(video.name),
+              ),
+            );
+          }
+          // ✅ VIDEO FICHIER LOCAL
+          else {
+            request.files.add(
+              await http.MultipartFile.fromPath(
+                'video',
+                video.path!,
+                contentType: _getMediaType(video.path!),
+              ),
+            );
+          }
+        }
+      }
 
       // Audio (enregistrement local)
       // ================= AUDIO =================
-          if (_audioPath != null) {
-            debugPrint('🎙️ Audio path=$_audioPath');
+      if (_audioPath != null) {
+        debugPrint('🎙️ Audio path=$_audioPath');
 
-            // ✅ AUDIO BASE64
-            if (_audioPath!.startsWith('data:audio')) {
-              final base64Data = _audioPath!.split(',').last;
-              final bytes = base64Decode(base64Data);
+        // ✅ AUDIO BASE64
+        if (_audioPath!.startsWith('data:audio')) {
+          final base64Data = _audioPath!.split(',').last;
+          final bytes = base64Decode(base64Data);
 
-              request.files.add(
-                http.MultipartFile.fromBytes(
-                  'audio',
-                  bytes,
-                  filename: 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
-                  contentType: MediaType('audio', 'm4a'),
-                ),
-              );
-            }
-
-            // ✅ AUDIO FICHIER LOCAL
-            else {
-              request.files.add(
-                await http.MultipartFile.fromPath(
-                  'audio',
-                  _audioPath!,
-                  contentType: MediaType('audio', 'm4a'),
-                ),
-              );
-            }
-          }
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'audio',
+              bytes,
+              filename: 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
+              contentType: MediaType('audio', 'm4a'),
+            ),
+          );
+        }
+        // ✅ AUDIO FICHIER LOCAL
+        else {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'audio',
+              _audioPath!,
+              contentType: MediaType('audio', 'm4a'),
+            ),
+          );
+        }
+      }
 
       debugPrint('📤 Nombre de fichiers à uploader: ${request.files.length}');
 
@@ -1106,14 +1139,14 @@ if (_videos.isNotEmpty) {
         try {
           final respData = jsonDecode(resp.body);
           final alertData = respData['data'] as Map<String, dynamic>? ?? {};
-          
+
           final imageUrl = alertData['imageUrl'] as String?;
           final videoUrl = alertData['videoUrl'] as String?;
           final audioUrl = alertData['audioUrl'] as String?;
-          
+
           // Construire un message de succès avec les URLs
           String mediaMessage = "✅ Médias uploadés avec succès!\n\n";
-          
+
           if (imageUrl != null && imageUrl.isNotEmpty) {
             mediaMessage += "📷 Image: $imageUrl\n";
             debugPrint('✅ Image uploadée: $imageUrl');
@@ -1126,7 +1159,7 @@ if (_videos.isNotEmpty) {
             mediaMessage += "🎧 Audio: $audioUrl\n";
             debugPrint('✅ Audio uploadé: $audioUrl');
           }
-          
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -1150,11 +1183,16 @@ if (_videos.isNotEmpty) {
       } else {
         debugPrint('❌ Erreur upload - Status ${resp.statusCode}');
         debugPrint('❌ Response: ${resp.body}');
-        setState(() => errorMessage = 'Erreur upload média (${resp.statusCode}): ${resp.body}');
+        setState(
+          () => errorMessage =
+              'Erreur upload média (${resp.statusCode}): ${resp.body}',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('❌ Erreur upload média: ${resp.statusCode}\n${resp.body}'),
+              content: Text(
+                '❌ Erreur upload média: ${resp.statusCode}\n${resp.body}',
+              ),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 5),
             ),
@@ -1166,139 +1204,131 @@ if (_videos.isNotEmpty) {
       setState(() => errorMessage = 'Erreur upload des médias : $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Erreur: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('❌ Erreur: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-                    Future<void> _saveDraft() async {
-  debugPrint("=== SAVE DRAFT ===");
-  debugPrint("Form: $form");
+  Future<void> _saveDraft() async {
+    debugPrint("=== SAVE DRAFT ===");
+    debugPrint("Form: $form");
 
-  // 🔴 RÈGLE : description obligatoire si audio existe
-  if (_audioPath != null &&
-      _audioDescriptionController.text.trim().isEmpty) {
+    // 🔴 RÈGLE : description obligatoire si audio existe
+    if (_audioPath != null && _audioDescriptionController.text.trim().isEmpty) {
+      setState(() {
+        _audioDescriptionError =
+            "Veuillez décrire le contenu de l'enregistrement audio.";
+      });
+      return; // ⛔ STOP ici, pas d'appel API
+    } else {
+      _audioDescriptionError = null;
+    }
+
     setState(() {
-      _audioDescriptionError =
-          "Veuillez décrire le contenu de l'enregistrement audio.";
+      loading = true;
+      errorMessage = null;
     });
-    return; // ⛔ STOP ici, pas d'appel API
-  } else {
-    _audioDescriptionError = null;
-  }
 
-  setState(() {
-    loading = true;
-    errorMessage = null;
-  });
+    // 🔁 Dates combinées (si présentes)
+    final startDateTime = _combineDateTime(
+      form["startDate"] as String?,
+      form["startTime"] as String?,
+    );
 
-  // 🔁 Dates combinées (si présentes)
-  final startDateTime =
-      _combineDateTime(form["startDate"] as String?, form["startTime"] as String?);
+    final endDateTime = (form["endDate"] ?? "").toString().isNotEmpty
+        ? _combineDateTime(
+            form["endDate"] as String?,
+            form["endTime"] as String?,
+          )
+        : null;
 
-  final endDateTime =
-      (form["endDate"] ?? "").toString().isNotEmpty
-          ? _combineDateTime(form["endDate"] as String?, form["endTime"] as String?)
-          : null;
+    // 📦 DONNÉES À ENVOYER
+    final zoneIds = _collectZoneIds();
+    final primaryZoneId = _resolvePrimaryZoneId();
 
-  // 📦 DONNÉES À ENVOYER
-  final data = {
-    "title": form["title"] ?? "",
-    "message": form["message"] ?? "",
-    "type": form["type"],
-    "severity": form["severity"],
-    "zoneId": form["zoneId"],
-    "startDate": startDateTime,
-    "endDate": endDateTime,
-    if ((form["instructions"] ?? "").toString().trim().isNotEmpty)
-  "instructions": form["instructions"],
+    final data = {
+      "title": form["title"] ?? "",
+      "message": form["message"] ?? "",
+      "type": form["type"],
+      if (form["type"] == "OTHER" &&
+          _otherTypeController.text.trim().isNotEmpty)
+        "customType": _otherTypeController.text.trim(),
+      "severity": form["severity"],
+      "zoneId": primaryZoneId,
+      if (zoneIds.length > 1) "zoneIds": zoneIds,
+      "startDate": startDateTime,
+      "endDate": endDateTime,
+      if ((form["instructions"] ?? "").toString().trim().isNotEmpty)
+        "instructions": form["instructions"],
 
-"actionRequired": form["actionRequired"] == true,
+      "actionRequired": form["actionRequired"] == true,
 
-// ⚠️ status seulement en édition
+      // ⚠️ status seulement en édition
+      "instructions": form["instructions"],
+      "actionRequired": form["actionRequired"],
+      "status": "DRAFT",
 
-
-    "instructions": form["instructions"],
-    "actionRequired": form["actionRequired"],
-    "status": "DRAFT",
-
-    // 🎧 Audio (si présent)
-    "audioDescription": _audioDescriptionController.text.trim(),
-  };
-
-  debugPrint("Draft payload: $data");
-
-  final isEdit = widget.isEditMode && widget.existingAlert != null;
-
-final alertId = isEdit
-    ? widget.existingAlert!["id"]
-    : null;
-
-final url = isEdit
-    ? Uri.parse("http://197.239.116.77:3000/api/v1/alerts/$alertId")
-    : Uri.parse("http://197.239.116.77:3000/api/v1/alerts");
-
-
-  try {
-    final token = await _getAccessTokenFromProfile();
-
-    final headers = {
-      'Content-Type': 'application/json',
-      if (token != null && token.isNotEmpty)
-        'Authorization': 'Bearer $token',
+      // 🎧 Audio (si présent)
+      "audioDescription": _audioDescriptionController.text.trim(),
     };
 
-    final response = isEdit
-    ? await http.put(
-        url,
-        headers: headers,
-        body: jsonEncode(data),
-      )
-    : await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode(data),
-      );
+    debugPrint("Draft payload: $data");
 
-    debugPrint("Draft response ${response.statusCode}");
-    debugPrint(response.body);
+    final isEdit = widget.isEditMode && widget.existingAlert != null;
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      if (!mounted) return;
+    final alertId = isEdit ? widget.existingAlert!["id"] : null;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("✅ Brouillon enregistré avec succès"),
-          backgroundColor: Colors.green,
-        ),
-      );
+    final url = isEdit
+        ? Uri.parse("http://197.239.116.77:3000/api/v1/alerts/$alertId")
+        : Uri.parse("http://197.239.116.77:3000/api/v1/alerts");
 
-      Navigator.pop(context, true);
-    } else {
+    try {
+      final token = await _getAccessTokenFromProfile();
+
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final response = isEdit
+          ? await http.put(url, headers: headers, body: jsonEncode(data))
+          : await http.post(url, headers: headers, body: jsonEncode(data));
+
+      debugPrint("Draft response ${response.statusCode}");
+      debugPrint(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Brouillon enregistré avec succès"),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        Navigator.pop(context, true);
+      } else {
+        setState(() {
+          errorMessage = httpErrorMessage(response.statusCode, response.body);
+        });
+      }
+    } catch (e) {
       setState(() {
-        errorMessage = httpErrorMessage(response.statusCode, response.body);
+        errorMessage = "Erreur réseau : $e";
       });
-    }
-  } catch (e) {
-    setState(() {
-      errorMessage = "Erreur réseau : $e";
-    });
-  } finally {
-    if (mounted) {
-      setState(() => loading = false);
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
-}
-
 
   bool get canSubmit {
     return form["title"].toString().trim().length >= 5 &&
         form["message"].toString().trim().length >= 10 &&
-        (form["zoneId"] ?? "").toString().isNotEmpty &&
+        _resolvePrimaryZoneId().isNotEmpty &&
         (form["startDate"] ?? "").toString().isNotEmpty;
   }
 
@@ -1324,7 +1354,13 @@ final url = isEdit
       } else {
         final parsed = DateTime.tryParse(date);
         if (parsed != null) {
-          final dt = DateTime(parsed.year, parsed.month, parsed.day, hour, minute);
+          final dt = DateTime(
+            parsed.year,
+            parsed.month,
+            parsed.day,
+            hour,
+            minute,
+          );
           return dt.toIso8601String();
         }
       }
@@ -1362,8 +1398,17 @@ final url = isEdit
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text("❌ Erreur", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                              Text(errorMessage!, style: TextStyle(color: Colors.red[900])),
+                              const Text(
+                                "❌ Erreur",
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                errorMessage!,
+                                style: TextStyle(color: Colors.red[900]),
+                              ),
                             ],
                           ),
                         ),
@@ -1373,8 +1418,13 @@ final url = isEdit
                         color: Colors.blue[50],
                         margin: const EdgeInsets.only(bottom: 16),
                         child: Text(
-                          zonesLoading ? "⏳ Chargement des zones..." : "✅ Zones: ${zones.length} chargée(s)",
-                          style: TextStyle(fontSize: 12, color: Colors.blue[900]),
+                          zonesLoading
+                              ? "⏳ Chargement des zones..."
+                              : "✅ Zones: ${zones.length} chargée(s)",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue[900],
+                          ),
                         ),
                       ),
                       // Title
@@ -1385,9 +1435,12 @@ final url = isEdit
                           hintText: "Ex: Inondation à Ouagadougou",
                           border: const OutlineInputBorder(),
                           errorText: _titleError,
-                          helperText: "${form["title"].toString().length}/5 caractères minimum",
+                          helperText:
+                              "${form["title"].toString().length}/5 caractères minimum",
                           helperStyle: TextStyle(
-                            color: form["title"].toString().length >= 5 ? Colors.green : Colors.grey,
+                            color: form["title"].toString().length >= 5
+                                ? Colors.green
+                                : Colors.grey,
                           ),
                         ),
                         onChanged: (v) {
@@ -1396,7 +1449,8 @@ final url = isEdit
                             if (v.trim().isEmpty) {
                               _titleError = "Le titre est obligatoire";
                             } else if (v.trim().length < 5) {
-                              _titleError = "Le titre doit contenir au moins 5 caractères";
+                              _titleError =
+                                  "Le titre doit contenir au moins 5 caractères";
                             } else {
                               _titleError = null;
                             }
@@ -1404,15 +1458,13 @@ final url = isEdit
                         },
                         onEditingComplete: () {
                           if (form["title"].toString().trim().isEmpty) {
-                            setState(() => _titleError = "Le titre est obligatoire");
+                            setState(
+                              () => _titleError = "Le titre est obligatoire",
+                            );
                           }
                         },
                       ),
                       const SizedBox(height: 16),
-
-                      
-                      
-                      
 
                       // Type & Severity
                       isMobile
@@ -1425,11 +1477,32 @@ final url = isEdit
                                   ),
                                   initialValue: form["type"],
                                   items: alertTypes
-                                      .map((e) => DropdownMenuItem(
-                                          value: e["value"], child: Text(e["label"]!)))
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          value: e["value"],
+                                          child: Text(e["label"]!),
+                                        ),
+                                      )
                                       .toList(),
-                                  onChanged: (v) => setState(() => form["type"] = v ?? ""),
+                                  onChanged: (v) =>
+                                      setState(() => form["type"] = v ?? ""),
                                 ),
+                                if (form["type"] == "OTHER") ...[
+                                  const SizedBox(height: 12),
+                                  _buildLabel(
+                                    "Spécifiez le type d'alerte *",
+                                    Icons.edit,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildTextField(
+                                    hintText:
+                                        "Ex: Pollution, Accident routier, etc.",
+                                    controller: _otherTypeController,
+                                    onChanged: (v) =>
+                                        setState(() => form["customType"] = v),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField(
                                   decoration: const InputDecoration(
@@ -1438,343 +1511,408 @@ final url = isEdit
                                   ),
                                   initialValue: form["severity"],
                                   items: severityLevels
-                                      .map((e) => DropdownMenuItem(
-                                          value: e["value"], child: Text(e["label"]!)))
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          value: e["value"],
+                                          child: Text(e["label"]!),
+                                        ),
+                                      )
                                       .toList(),
-                                  onChanged: (v) => setState(() => form["severity"] = v ?? ""),
+                                  onChanged: (v) => setState(
+                                    () => form["severity"] = v ?? "",
+                                  ),
                                 ),
                               ],
                             )
-                          : Row(
+                          : Column(
                               children: [
-                                Expanded(
-                                  child: DropdownButtonFormField(
-                                    decoration: const InputDecoration(
-                                      labelText: "Type d'alerte *",
-                                      border: OutlineInputBorder(),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField(
+                                        decoration: const InputDecoration(
+                                          labelText: "Type d'alerte *",
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        initialValue: form["type"],
+                                        items: alertTypes
+                                            .map(
+                                              (e) => DropdownMenuItem(
+                                                value: e["value"],
+                                                child: Text(e["label"]!),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (v) => setState(
+                                          () => form["type"] = v ?? "",
+                                        ),
+                                      ),
                                     ),
-                                    initialValue: form["type"],
-                                    items: alertTypes
-                                        .map((e) => DropdownMenuItem(
-                                            value: e["value"], child: Text(e["label"]!)))
-                                        .toList(),
-                                    onChanged: (v) => setState(() => form["type"] = v ?? ""),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: DropdownButtonFormField(
-                                    decoration: const InputDecoration(
-                                      labelText: "Sévérité *",
-                                      border: OutlineInputBorder(),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: DropdownButtonFormField(
+                                        decoration: const InputDecoration(
+                                          labelText: "Sévérité *",
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        initialValue: form["severity"],
+                                        items: severityLevels
+                                            .map(
+                                              (e) => DropdownMenuItem(
+                                                value: e["value"],
+                                                child: Text(e["label"]!),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (v) => setState(
+                                          () => form["severity"] = v ?? "",
+                                        ),
+                                      ),
                                     ),
-                                    initialValue: form["severity"],
-                                    items: severityLevels
-                                        .map((e) => DropdownMenuItem(
-                                            value: e["value"], child: Text(e["label"]!)))
-                                        .toList(),
-                                    onChanged: (v) => setState(() => form["severity"] = v ?? ""),
-                                  ),
+                                  ],
                                 ),
+                                if (form["type"] == "OTHER") ...[
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            _buildLabel(
+                                              "Spécifiez le type d'alerte *",
+                                              Icons.edit,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            _buildTextField(
+                                              hintText:
+                                                  "Ex: Pollution, Accident routier, etc.",
+                                              controller: _otherTypeController,
+                                              onChanged: (v) => setState(
+                                                () => form["customType"] = v,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      const Expanded(child: SizedBox.shrink()),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                       const SizedBox(height: 16),
-                      // Conditional "Other" type field
-                      if (form["type"] == "OTHER") ...[
-                        const SizedBox(height: 28),
-                        _buildLabel("Spécifiez le type d'alerte *", Icons.edit),
-                        const SizedBox(height: 12),
-                        _buildTextField(
-                          hintText: "Ex: Pollution, Accident routier, etc.",
-                          controller: _otherTypeController,
-                          onChanged: (v) => setState(() => form["customType"] = v),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
 
+                      ...List.generate(localisations.length, (index) {
+                        final loc = localisations[index];
 
-                    ...List.generate(localisations.length, (index) {
-                          final loc = localisations[index];
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // REGION
+                            DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(
+                                labelText: "Région *",
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              value: loc["regionId"],
+                              isExpanded: true,
+                              items: regions.map<DropdownMenuItem<String>>((r) {
+                                return DropdownMenuItem<String>(
+                                  value: r["id"],
+                                  child: Text(r["name"]),
+                                );
+                              }).toList(),
+                              onChanged: (regionId) {
+                                setState(() {
+                                  loc["regionId"] = regionId;
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
+                                  // reset hiérarchie
+                                  loc["provinceId"] = null;
+                                  loc["communeId"] = null;
+                                  loc["provinces"] = [];
+                                  loc["communes"] = [];
 
-                              // REGION
-                              DropdownButtonFormField<String>(
-  decoration: const InputDecoration(
-    labelText: "Région *",
-    border: OutlineInputBorder(),
-    filled: true,
-    fillColor: Colors.white,
-  ),
-  value: loc["regionId"],
-  isExpanded: true,
-  items: regions.map<DropdownMenuItem<String>>((r) {
-    return DropdownMenuItem<String>(
-      value: r["id"],
-      child: Text(r["name"]),
-    );
-  }).toList(),
-  onChanged: (regionId) {
-    setState(() {
-      loc["regionId"] = regionId;
+                                  // utilisé par le backend
+                                  form["zoneId"] = regionId ?? "";
 
-      // reset hiérarchie
-      loc["provinceId"] = null;
-      loc["communeId"] = null;
-      loc["provinces"] = [];
-      loc["communes"] = [];
+                                  if (regionId != null) {
+                                    _loadProvincesForLoc(loc, regionId);
+                                  }
+                                });
+                              },
+                            ),
 
-      // utilisé par le backend
-      form["zoneId"] = regionId ?? "";
+                            const SizedBox(height: 16),
 
+                            // PROVINCE
+                            DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(
+                                labelText: "Province",
+                                border: OutlineInputBorder(),
+                              ),
+                              value: loc["provinceId"],
+                              items: (loc["provinces"] as List)
+                                  .map<DropdownMenuItem<String>>((p) {
+                                    return DropdownMenuItem<String>(
+                                      value: p["id"],
+                                      child: Text(p["name"]),
+                                    );
+                                  })
+                                  .toList(),
+                              onChanged: (provinceId) {
+                                setState(() {
+                                  loc["provinceId"] = provinceId;
+                                  loc["communeId"] = null;
+                                  loc["communes"] = [];
 
-      if (regionId != null) {
-        _loadProvincesForLoc(loc, regionId);
-      }
-    });
-  },
-),
+                                  if (provinceId != null) {
+                                    _loadCommunesForLoc(loc, provinceId);
+                                  }
+                                });
+                              },
+                            ),
 
+                            const SizedBox(height: 16),
 
-                              const SizedBox(height: 16),
+                            // COMMUNE
+                            DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(
+                                labelText: "Commune",
+                                border: OutlineInputBorder(),
+                              ),
+                              value: loc["communeId"],
+                              items: (loc["communes"] as List)
+                                  .map<DropdownMenuItem<String>>((c) {
+                                    return DropdownMenuItem<String>(
+                                      value: c["id"],
+                                      child: Text(c["name"]),
+                                    );
+                                  })
+                                  .toList(),
+                              onChanged: (communeId) {
+                                setState(() {
+                                  loc["communeId"] = communeId;
 
-                              // PROVINCE
-                              DropdownButtonFormField<String>(
-  decoration: const InputDecoration(
-    labelText: "Province *",
-    border: OutlineInputBorder(),
-  ),
-  value: loc["provinceId"],
-  items: (loc["provinces"] as List)
-      .map<DropdownMenuItem<String>>((p) {
-    return DropdownMenuItem<String>(
-      value: p["id"],
-      child: Text(p["name"]),
-    );
-  }).toList(),
-  onChanged: (provinceId) {
-    setState(() {
-      loc["provinceId"] = provinceId;
-      loc["communeId"] = null;
-      loc["communes"] = [];
+                                  if (communeId != null &&
+                                      communeId.isNotEmpty) {
+                                    form["zoneId"] =
+                                        communeId; // String non-null ✅
+                                    _zoneError = null;
+                                  } else {
+                                    form.remove(
+                                      "zoneId",
+                                    ); // évite données invalides
+                                  }
+                                });
+                              },
+                            ),
 
-      if (provinceId != null) {
-        _loadCommunesForLoc(loc, provinceId);
-      }
-    });
-  },
-),
+                            const SizedBox(height: 24),
 
-
-                              const SizedBox(height: 16),
-
-                              // COMMUNE
-                              DropdownButtonFormField<String>(
-  decoration: const InputDecoration(
-    labelText: "Commune *",
-    border: OutlineInputBorder(),
-  ),
-  value: loc["communeId"],
-  items: (loc["communes"] as List)
-      .map<DropdownMenuItem<String>>((c) {
-    return DropdownMenuItem<String>(
-      value: c["id"],
-      child: Text(c["name"]),
-    );
-  }).toList(),
-  onChanged: (communeId) {
-  setState(() {
-    loc["communeId"] = communeId;
-
-    if (communeId != null && communeId.isNotEmpty) {
-      form["zoneId"] = communeId; // String non-null ✅
-      _zoneError = null;
-    } else {
-      form.remove("zoneId"); // évite données invalides
-    }
-  });
-},
-
-
-
-
-),
-
-                              const SizedBox(height: 24),
-
-                              if (localisations.length > 1)
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: TextButton.icon(
-                                    onPressed: () => setState(() => localisations.removeAt(index)),
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    label: const Text("Supprimer",
-                                        style: TextStyle(color: Colors.red)),
+                            if (localisations.length > 1)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: () => setState(
+                                    () => localisations.removeAt(index),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
+                                  label: const Text(
+                                    "Supprimer",
+                                    style: TextStyle(color: Colors.red),
                                   ),
                                 ),
+                              ),
 
-                              // Show zone error
-                              if (_zoneError != null && index == 0)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    _zoneError!,
-                                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                            // Show zone error
+                            if (_zoneError != null && index == 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  _zoneError!,
+                                  style: const TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 12,
                                   ),
                                 ),
+                              ),
 
-                              const Divider(height: 32),
-                            ],
-                          );
-                       }),
+                            const Divider(height: 32),
+                          ],
+                        );
+                      }),
 
-
-                        // Ajouter un autre groupe
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            icon: const Icon(Icons.add),
-                            label: const Text("Ajouter une autre localisation"),
-                            onPressed: () => setState(() => localisations.add({
+                      // Ajouter un autre groupe
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.add),
+                          label: const Text("Ajouter une autre localisation"),
+                          onPressed: () => setState(
+                            () => localisations.add({
                               "regionId": null,
-  "provinceId": null,
-  "communeId": null,
-  "provinces": [],
-  "communes": []
-                            })),
+                              "provinceId": null,
+                              "communeId": null,
+                              "provinces": [],
+                              "communes": [],
+                            }),
                           ),
                         ),
+                      ),
 
                       const SizedBox(height: 16),
                       // Period
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Période de l'événement", style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text(
+                            "Période de l'événement",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           const SizedBox(height: 12),
                           isMobile
                               ? Column(
                                   children: [
-                                   TextField(
-                                    controller: _startDateController,
-                                    readOnly: true,
-                                    decoration: InputDecoration(
-                                      labelText: "Date début *",
-                                      border: const OutlineInputBorder(),
-                                      suffixIcon: const Icon(Icons.calendar_today),
-                                      errorText: _startDateError,
+                                    TextField(
+                                      controller: _startDateController,
+                                      readOnly: true,
+                                      decoration: InputDecoration(
+                                        labelText: "Date début *",
+                                        border: const OutlineInputBorder(),
+                                        suffixIcon: const Icon(
+                                          Icons.calendar_today,
+                                        ),
+                                        errorText: _startDateError,
+                                      ),
+                                      onTap: () async {
+                                        final DateTime? picked =
+                                            await showDatePicker(
+                                              context: context,
+                                              initialDate: DateTime.now(),
+                                              firstDate: DateTime(2000),
+                                              lastDate: DateTime(2100),
+                                            );
+
+                                        if (picked != null) {
+                                          final formatted =
+                                              "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                          _startDateController.text =
+                                              formatted; // ✅ Met à jour le champ affiché
+                                          setState(() {
+                                            form["startDate"] =
+                                                formatted; // ✅ Met à jour la donnée pour la base
+                                            _startDateError =
+                                                null; // Clear error
+                                          });
+                                        } else {
+                                          setState(() {
+                                            if (_startDateController
+                                                .text
+                                                .isEmpty) {
+                                              _startDateError =
+                                                  "La date de début est obligatoire";
+                                            }
+                                          });
+                                        }
+                                      },
                                     ),
-                                    onTap: () async {
-                                      final DateTime? picked = await showDatePicker(
-                                        context: context,
-                                        initialDate: DateTime.now(),
-                                        firstDate: DateTime(2000),
-                                        lastDate: DateTime(2100),
-                                      );
-
-                                      if (picked != null) {
-                                        final formatted =
-                                            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                                        _startDateController.text = formatted;  // ✅ Met à jour le champ affiché
-                                        setState(() {
-                                          form["startDate"] = formatted;         // ✅ Met à jour la donnée pour la base
-                                          _startDateError = null;  // Clear error
-                                        });
-                                      } else {
-                                        setState(() {
-                                          if (_startDateController.text.isEmpty) {
-                            _startDateError = "La date de début est obligatoire";
-                                          }
-                                        });
-                                      }
-                                    },
-                                  ),
-
 
                                     const SizedBox(height: 12),
-                                   TextField(
-                                          controller: _startTimeController,
-                                          readOnly: true,
-                                          decoration: const InputDecoration(
-                                            labelText: "Heure début",
-                                            border: OutlineInputBorder(),
-                                            suffixIcon: Icon(Icons.access_time),
-                                          ),
-                                          onTap: () async {
-                                            final TimeOfDay? picked = await showTimePicker(
+                                    TextField(
+                                      controller: _startTimeController,
+                                      readOnly: true,
+                                      decoration: const InputDecoration(
+                                        labelText: "Heure début",
+                                        border: OutlineInputBorder(),
+                                        suffixIcon: Icon(Icons.access_time),
+                                      ),
+                                      onTap: () async {
+                                        final TimeOfDay? picked =
+                                            await showTimePicker(
                                               context: context,
                                               initialTime: TimeOfDay.now(),
                                             );
 
-                                            if (picked != null) {
-                                              final formatted =
-                                                  "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
-                                              _startTimeController.text = formatted;   // ✅ Met à jour le champ affiché
-                                              setState(() {
-                                                form["startTime"] = formatted;         // ✅ Met à jour la donnée pour la base
-                                              });
-                                            }
-                                          },
-                                        ),
-
+                                        if (picked != null) {
+                                          final formatted =
+                                              "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+                                          _startTimeController.text =
+                                              formatted; // ✅ Met à jour le champ affiché
+                                          setState(() {
+                                            form["startTime"] =
+                                                formatted; // ✅ Met à jour la donnée pour la base
+                                          });
+                                        }
+                                      },
+                                    ),
 
                                     const SizedBox(height: 16),
                                     TextField(
-                                  controller: _endDateController,
-                                  readOnly: true,
-                                  decoration: const InputDecoration(
-                                    labelText: "Date fin",
-                                    border: OutlineInputBorder(),
-                                    suffixIcon: Icon(Icons.calendar_today),
-                                  ),
-                                  onTap: () async {
-                                    final DateTime? picked = await showDatePicker(
-                                      context: context,
-                                      initialDate: DateTime.now(),
-                                      firstDate: DateTime(2000),
-                                      lastDate: DateTime(2100),
-                                    );
+                                      controller: _endDateController,
+                                      readOnly: true,
+                                      decoration: const InputDecoration(
+                                        labelText: "Date fin",
+                                        border: OutlineInputBorder(),
+                                        suffixIcon: Icon(Icons.calendar_today),
+                                      ),
+                                      onTap: () async {
+                                        final DateTime? picked =
+                                            await showDatePicker(
+                                              context: context,
+                                              initialDate: DateTime.now(),
+                                              firstDate: DateTime(2000),
+                                              lastDate: DateTime(2100),
+                                            );
 
-                                    if (picked != null) {
-                                      final formatted =
-                                          "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                                      _endDateController.text = formatted;    // Affiche la date choisie dans le champ
-                                      setState(() {
-                                        form["endDate"] = formatted;          // Stocke la date dans ton formulaire
-                                      });
-                                    }
-                                  },
-                                ),
-
+                                        if (picked != null) {
+                                          final formatted =
+                                              "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                          _endDateController.text =
+                                              formatted; // Affiche la date choisie dans le champ
+                                          setState(() {
+                                            form["endDate"] =
+                                                formatted; // Stocke la date dans ton formulaire
+                                          });
+                                        }
+                                      },
+                                    ),
 
                                     const SizedBox(height: 12),
                                     TextField(
-                                    controller: _endTimeController,
-                                    readOnly: true,
-                                    decoration: const InputDecoration(
-                                      labelText: "Heure fin",
-                                      border: OutlineInputBorder(),
-                                      suffixIcon: Icon(Icons.access_time),
+                                      controller: _endTimeController,
+                                      readOnly: true,
+                                      decoration: const InputDecoration(
+                                        labelText: "Heure fin",
+                                        border: OutlineInputBorder(),
+                                        suffixIcon: Icon(Icons.access_time),
+                                      ),
+                                      onTap: () async {
+                                        final TimeOfDay? picked =
+                                            await showTimePicker(
+                                              context: context,
+                                              initialTime: TimeOfDay.now(),
+                                            );
+
+                                        if (picked != null) {
+                                          final formatted =
+                                              "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+                                          _endTimeController.text =
+                                              formatted; // Affiche l'heure choisie dans le champ
+                                          setState(() {
+                                            form["endTime"] =
+                                                formatted; // Stocke l'heure dans ton formulaire
+                                          });
+                                        }
+                                      },
                                     ),
-                                    onTap: () async {
-                                      final TimeOfDay? picked = await showTimePicker(
-                                        context: context,
-                                        initialTime: TimeOfDay.now(),
-                                      );
-
-                                      if (picked != null) {
-                                        final formatted =
-                                            "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
-                                        _endTimeController.text = formatted;    // Affiche l'heure choisie dans le champ
-                                        setState(() {
-                                          form["endTime"] = formatted;          // Stocke l'heure dans ton formulaire
-                                        });
-                                      }
-                                    },
-                                  ),
-
                                   ],
                                 )
                               : Column(
@@ -1788,56 +1926,64 @@ final url = isEdit
                                             decoration: const InputDecoration(
                                               labelText: "Date début",
                                               border: OutlineInputBorder(),
-                                              suffixIcon: Icon(Icons.calendar_today),
+                                              suffixIcon: Icon(
+                                                Icons.calendar_today,
+                                              ),
                                             ),
                                             onTap: () async {
-                                              final DateTime? picked = await showDatePicker(
-                                                context: context,
-                                                initialDate: DateTime.now(),
-                                                firstDate: DateTime(2000),
-                                                lastDate: DateTime(2100),
-                                              );
+                                              final DateTime? picked =
+                                                  await showDatePicker(
+                                                    context: context,
+                                                    initialDate: DateTime.now(),
+                                                    firstDate: DateTime(2000),
+                                                    lastDate: DateTime(2100),
+                                                  );
 
                                               if (picked != null) {
                                                 final formatted =
                                                     "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                                                _startDateController.text = formatted;  // ✅ Met à jour le champ affiché
+                                                _startDateController.text =
+                                                    formatted; // ✅ Met à jour le champ affiché
                                                 setState(() {
-                                                  form["startDate"] = formatted;         // ✅ Met à jour la donnée pour la base
+                                                  form["startDate"] =
+                                                      formatted; // ✅ Met à jour la donnée pour la base
                                                 });
                                               }
                                             },
                                           ),
-
                                         ),
                                         const SizedBox(width: 16),
                                         Expanded(
-                                          child:TextField(
+                                          child: TextField(
                                             controller: _startTimeController,
                                             readOnly: true,
                                             decoration: const InputDecoration(
                                               labelText: "Heure début",
                                               border: OutlineInputBorder(),
-                                              suffixIcon: Icon(Icons.access_time),
+                                              suffixIcon: Icon(
+                                                Icons.access_time,
+                                              ),
                                             ),
                                             onTap: () async {
-                                              final TimeOfDay? picked = await showTimePicker(
-                                                context: context,
-                                                initialTime: TimeOfDay.now(),
-                                              );
+                                              final TimeOfDay? picked =
+                                                  await showTimePicker(
+                                                    context: context,
+                                                    initialTime:
+                                                        TimeOfDay.now(),
+                                                  );
 
                                               if (picked != null) {
                                                 final formatted =
                                                     "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
-                                                _startTimeController.text = formatted;   // ✅ Met à jour le champ affiché
+                                                _startTimeController.text =
+                                                    formatted; // ✅ Met à jour le champ affiché
                                                 setState(() {
-                                                  form["startTime"] = formatted;         // ✅ Met à jour la donnée pour la base
+                                                  form["startTime"] =
+                                                      formatted; // ✅ Met à jour la donnée pour la base
                                                 });
                                               }
                                             },
                                           ),
-
-
                                         ),
                                       ],
                                     ),
@@ -1845,62 +1991,70 @@ final url = isEdit
                                     Row(
                                       children: [
                                         Expanded(
-                                          child:TextField(
+                                          child: TextField(
                                             controller: _endDateController,
                                             readOnly: true,
                                             decoration: const InputDecoration(
                                               labelText: "Date fin",
                                               border: OutlineInputBorder(),
-                                              suffixIcon: Icon(Icons.calendar_today),
+                                              suffixIcon: Icon(
+                                                Icons.calendar_today,
+                                              ),
                                             ),
                                             onTap: () async {
-                                              final DateTime? picked = await showDatePicker(
-                                                context: context,
-                                                initialDate: DateTime.now(),
-                                                firstDate: DateTime(2000),
-                                                lastDate: DateTime(2100),
-                                              );
+                                              final DateTime? picked =
+                                                  await showDatePicker(
+                                                    context: context,
+                                                    initialDate: DateTime.now(),
+                                                    firstDate: DateTime(2000),
+                                                    lastDate: DateTime(2100),
+                                                  );
 
                                               if (picked != null) {
                                                 final formatted =
                                                     "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                                                _endDateController.text = formatted;    // Affiche la date choisie dans le champ
+                                                _endDateController.text =
+                                                    formatted; // Affiche la date choisie dans le champ
                                                 setState(() {
-                                                  form["endDate"] = formatted;          // Stocke la date dans ton formulaire
+                                                  form["endDate"] =
+                                                      formatted; // Stocke la date dans ton formulaire
                                                 });
                                               }
                                             },
                                           ),
-
-
                                         ),
                                         const SizedBox(width: 16),
                                         Expanded(
                                           child: TextField(
-                                          controller: _endTimeController,
-                                          readOnly: true,
-                                          decoration: const InputDecoration(
-                                            labelText: "Heure fin",
-                                            border: OutlineInputBorder(),
-                                            suffixIcon: Icon(Icons.access_time),
+                                            controller: _endTimeController,
+                                            readOnly: true,
+                                            decoration: const InputDecoration(
+                                              labelText: "Heure fin",
+                                              border: OutlineInputBorder(),
+                                              suffixIcon: Icon(
+                                                Icons.access_time,
+                                              ),
+                                            ),
+                                            onTap: () async {
+                                              final TimeOfDay? picked =
+                                                  await showTimePicker(
+                                                    context: context,
+                                                    initialTime:
+                                                        TimeOfDay.now(),
+                                                  );
+
+                                              if (picked != null) {
+                                                final formatted =
+                                                    "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+                                                _endTimeController.text =
+                                                    formatted; // Affiche l'heure choisie dans le champ
+                                                setState(() {
+                                                  form["endTime"] =
+                                                      formatted; // Stocke l'heure dans ton formulaire
+                                                });
+                                              }
+                                            },
                                           ),
-                                          onTap: () async {
-                                            final TimeOfDay? picked = await showTimePicker(
-                                              context: context,
-                                              initialTime: TimeOfDay.now(),
-                                            );
-
-                                            if (picked != null) {
-                                              final formatted =
-                                                  "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
-                                              _endTimeController.text = formatted;    // Affiche l'heure choisie dans le champ
-                                              setState(() {
-                                                form["endTime"] = formatted;          // Stocke l'heure dans ton formulaire
-                                              });
-                                            }
-                                          },
-                                        ),
-
                                         ),
                                       ],
                                     ),
@@ -1912,26 +2066,69 @@ final url = isEdit
                       // Message
                       TextField(
                         controller: _messageController,
-                        decoration: const InputDecoration(labelText: "Message *", border: OutlineInputBorder()),
+                        decoration: InputDecoration(
+                          labelText: "Message *",
+                          border: const OutlineInputBorder(),
+                          errorText: _messageError,
+                          helperText:
+                              "${form["message"].toString().length}/10 caractères minimum",
+                          helperStyle: TextStyle(
+                            color: form["message"].toString().length >= 10
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                        ),
                         maxLines: 5,
-                        onChanged: (v) => setState(() => form["message"] = v),
+                        onChanged: (v) {
+                          setState(() {
+                            form["message"] = v;
+                            if (v.trim().isEmpty) {
+                              _messageError = "Le message est obligatoire";
+                            } else if (v.trim().length < 10) {
+                              _messageError =
+                                  "Le message doit contenir au moins 10 caractères";
+                            } else {
+                              _messageError = null;
+                            }
+                          });
+                        },
+                        onEditingComplete: () {
+                          if (form["message"].toString().trim().isEmpty) {
+                            setState(
+                              () =>
+                                  _messageError = "Le message est obligatoire",
+                            );
+                          } else if (form["message"].toString().trim().length <
+                              10) {
+                            setState(
+                              () => _messageError =
+                                  "Le message doit contenir au moins 10 caractères",
+                            );
+                          }
+                        },
                       ),
                       const SizedBox(height: 16),
                       // Instructions
                       TextField(
                         controller: _instructionsController,
-                        decoration: const InputDecoration(labelText: "Instructions", border: OutlineInputBorder()),
+                        decoration: const InputDecoration(
+                          labelText: "Instructions",
+                          border: OutlineInputBorder(),
+                        ),
                         maxLines: 3,
-                        onChanged: (v) => setState(() => form["instructions"] = v),
+                        onChanged: (v) =>
+                            setState(() => form["instructions"] = v),
                       ),
                       // Checkbox
                       Row(
                         children: [
                           Checkbox(
                             value: (form["actionRequired"] as bool?) ?? false,
-                            onChanged: (val) => setState(() => form["actionRequired"] = val ?? false),
+                            onChanged: (val) => setState(
+                              () => form["actionRequired"] = val ?? false,
+                            ),
                           ),
-                          const Text("Action immédiate requise")
+                          const Text("Action immédiate requise"),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -1951,7 +2148,7 @@ final url = isEdit
                               label: const Text("Ajouter des images (Galerie)"),
                             ),
                           ),
-                           const SizedBox(height: 12),
+                          const SizedBox(height: 12),
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
@@ -1964,184 +2161,236 @@ final url = isEdit
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                                onPressed: _pickVideos,
-                                icon: const Icon(Icons.videocam),
-                                label: const Text("Ajouter des vidéos"),
-                              ),
+                              onPressed: _pickVideos,
+                              icon: const Icon(Icons.videocam),
+                              label: const Text("Ajouter des vidéos"),
+                            ),
                           ),
                         ],
                       ),
 
                       if (_images.isNotEmpty)
-                      SizedBox(
-                        height: 120,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _images.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 12),
-                          itemBuilder: (_, index) => Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  width: 150,
-                                  color: Colors.grey.shade300,
-                                  child: _buildImagePreview(_images[index]),
-                                ),
-                              ),
-                              Positioned(
-                                top: 6,
-                                right: 6,
-                                child: GestureDetector(
-                                  onTap: () => setState(() => _images.removeAt(index)),
+                        SizedBox(
+                          height: 120,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _images.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
+                            itemBuilder: (_, index) => Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
                                   child: Container(
-                                    width: 26,
-                                    height: 26,
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.6),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                    width: 150,
+                                    color: Colors.grey.shade300,
+                                    child: _buildImagePreview(_images[index]),
                                   ),
                                 ),
-                              ),
-                            ],
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setState(() => _images.removeAt(index)),
+                                    child: Container(
+                                      width: 26,
+                                      height: 26,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.6),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
 
                       if (_videos.isNotEmpty)
-                      SizedBox(
-                        height: 160,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _videos.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 12),
-                          itemBuilder: (_, index) => Stack(
-                            children: [
-                              Container(
-                                width: 200,
-                                padding: const EdgeInsets.all(8),
-                                color: Colors.black12,
-                                child: _buildVideoPreview(_videos[index]),
-                              ),
-                              Positioned(
-                                top: 6,
-                                right: 6,
-                                child: GestureDetector(
-                                  onTap: () => setState(() => _videos.removeAt(index)),
-                                  child: Container(
-                                    width: 26,
-                                    height: 26,
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.6),
-                                      shape: BoxShape.circle,
+                        SizedBox(
+                          height: 160,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _videos.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
+                            itemBuilder: (_, index) => Stack(
+                              children: [
+                                Container(
+                                  width: 200,
+                                  padding: const EdgeInsets.all(8),
+                                  color: Colors.black12,
+                                  child: _buildVideoPreview(_videos[index]),
+                                ),
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setState(() => _videos.removeAt(index)),
+                                    child: Container(
+                                      width: 26,
+                                      height: 26,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.6),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                    child: const Icon(Icons.close, size: 16, color: Colors.white),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
 
+                      const SizedBox(height: 24),
 
-                    const SizedBox(height: 24),
-
-                    // ================= AUDIO (OPTIONNEL) =================
+                      // ================= AUDIO (OPTIONNEL) =================
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                         
-
                           // Bouton enregistrer / arrêter
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
                               icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                              label: Text(_isRecording ? "Arrêter l'enregistrement" : "Enregistrer un audio"),
-                              onPressed: _isRecording ? _stopRecording : _startRecording,
+                              label: Text(
+                                _isRecording
+                                    ? "Arrêter l'enregistrement"
+                                    : "Enregistrer un audio",
+                              ),
+                              onPressed: _isRecording
+                                  ? _stopRecording
+                                  : _startRecording,
                             ),
                           ),
 
+                          if (_isRecording)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    "Enregistrement en cours",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _formatDuration(_recordDuration),
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
                           const SizedBox(height: 8),
 
-                        // Lecture / suppression si audio existe
-                        if (_audioPath != null)
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-                                onPressed: _playAudio,
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: _deleteAudio,
-                              ),
-                              const Text("Audio enregistré"),
-                            ],
-                          ),
+                          // Lecture / suppression si audio existe
+                          if (_audioPath != null)
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    _isPlaying ? Icons.pause : Icons.play_arrow,
+                                  ),
+                                  onPressed: _playAudio,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete),
+                                  onPressed: _deleteAudio,
+                                ),
+                                const Text("Audio enregistré"),
+                              ],
+                            ),
 
-                        const SizedBox(height: 12),
-                      ],
-                    ),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
 
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       // Buttons
                       isMobile
-                           ? Column(
-          children: [
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: loading ? null : _saveDraft,
-                child: const Text("Enregistrer brouillon"),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: loading ? null : () => _submitAlert("SUBMITTED"),
-                child: Text(
-                  widget.isEditMode
-                      ? "Modifier et soumettre"
-                      : "Créer et soumettre",
-                ),
-              ),
-            ),
-          ],
-        )
-      : Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: loading ? null : _saveDraft,
-                child: const Text("Enregistrer brouillon"),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: loading ? null : () => _submitAlert("SUBMITTED"),
-                child: Text(
-                  widget.isEditMode
-                      ? "Modifier et soumettre"
-                      : "Créer et soumettre",
-                ),
-              ),
-            ),
-          ],
-        ),
+                          ? Column(
+                              children: [
+                                // SizedBox(
+                                //   width: double.infinity,
+                                //   child: OutlinedButton(
+                                //     onPressed: loading ? null : _saveDraft,
+                                //     child: const Text("Enregistrer brouillon"),
+                                //   ),
+                                // ),
+                                // const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: loading
+                                        ? null
+                                        : () => _submitAlert("SUBMITTED"),
+                                    child: Text(
+                                      widget.isEditMode
+                                          ? "Modifier et soumettre"
+                                          : "Créer et soumettre",
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                // Expanded(
+                                //   child: OutlinedButton(
+                                //     onPressed: loading ? null : _saveDraft,
+                                //     child: const Text("Enregistrer brouillon"),
+                                //   ),
+                                // ),
+                                // const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: loading
+                                        ? null
+                                        : () => _submitAlert("SUBMITTED"),
+                                    child: Text(
+                                      widget.isEditMode
+                                          ? "Modifier et soumettre"
+                                          : "Créer et soumettre",
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                     ],
-                      ),
+                  ),
+                ),
               ),
             ),
-    ));
+    );
   }
-  
-  
 }
 
 Widget _buildLabel(String text, IconData icon) {
@@ -2162,10 +2411,7 @@ Widget _buildImagePreview(PlatformFile image) {
     return Image.memory(image.bytes!, fit: BoxFit.cover);
   }
 
-  return Image(
-    image: FileImage(File(image.path!)),
-    fit: BoxFit.cover,
-  );
+  return Image(image: FileImage(File(image.path!)), fit: BoxFit.cover);
 }
 
 Widget _buildVideoPreview(PlatformFile video) {
@@ -2175,18 +2421,13 @@ Widget _buildVideoPreview(PlatformFile video) {
       children: [
         const Icon(Icons.videocam, size: 40),
         const SizedBox(height: 8),
-        Text(
-          video.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        Text(video.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       ],
     );
   }
 
   return _MobileVideoPlayer(file: File(video.path!));
 }
-
 
 Widget _buildTextField({
   required String hintText,
@@ -2219,11 +2460,7 @@ class _MobileVideoPlayerState extends State<_MobileVideoPlayer> {
     super.initState();
     _controller = VideoPlayerController.file(widget.file)
       ..initialize().then((_) => setState(() {}));
-
-    
   }
-
-  
 
   @override
   void dispose() {
@@ -2242,4 +2479,3 @@ class _MobileVideoPlayerState extends State<_MobileVideoPlayer> {
     );
   }
 }
-

@@ -13,7 +13,7 @@ import 'package:mobile_app/features/user/presentation/pages/profile_page.dart';
 import 'package:mobile_app/features/user/data/sources/user_local_service.dart';
 import 'package:mobile_app/features/alert/presentation/pages/alert_detail.dart';
 import 'package:mobile_app/features/alert/data/sources/alert_local_service.dart';
-import 'package:mobile_app/features/alert/presentation/pages/sync_alerts_page.dart'; 
+import 'package:mobile_app/features/alert/presentation/pages/sync_alerts_page.dart';
 import 'package:mobile_app/core/utils/http_error_helper.dart';
 import 'package:mobile_app/core/utils/auth_error_dialog.dart';
 import 'package:provider/provider.dart';
@@ -52,7 +52,10 @@ class _DashboardPageState extends State<DashboardPage> {
     });
 
     _pages = [
-      _DashboardHome(userRepository: widget.userRepository, token: widget.token),
+      _DashboardHome(
+        userRepository: widget.userRepository,
+        token: widget.token,
+      ),
       const AlertsListPage(),
       ProfilePage(userRepository: widget.userRepository, token: widget.token),
     ];
@@ -68,7 +71,10 @@ class _DashboardPageState extends State<DashboardPage> {
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Accueil"),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications), label: "Alertes"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications),
+            label: "Alertes",
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profil"),
         ],
       ),
@@ -90,11 +96,13 @@ class _DashboardHomeState extends State<_DashboardHome> {
   bool loading = false;
   String? error;
   List<dynamic> alerts = [];
+  int? totalAlertsCount;
   int pendingAlertsCount = 0;
   String? currentUserId;
-  
+
   // Pour les notifications
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   List<String> _previousAlertIds = [];
 
   @override
@@ -108,7 +116,9 @@ class _DashboardHomeState extends State<_DashboardHome> {
   }
 
   Future<void> _initializeNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const initSettings = InitializationSettings(android: androidSettings);
     await _localNotifications.initialize(
       settings: initSettings,
@@ -144,7 +154,10 @@ class _DashboardHomeState extends State<_DashboardHome> {
   Future<void> _savePreviousAlertIds() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('seen_alert_ids_dashboard', jsonEncode(_previousAlertIds));
+      await prefs.setString(
+        'seen_alert_ids_dashboard',
+        jsonEncode(_previousAlertIds),
+      );
     } catch (e) {
       debugPrint('Erreur sauvegarde alertes vues: $e');
     }
@@ -153,7 +166,9 @@ class _DashboardHomeState extends State<_DashboardHome> {
   Future<void> _loadCurrentUser() async {
     try {
       final dynamic repo = widget.userRepository;
-      final user = await repo.fetchUserProfile(widget.token); // ignore si absent
+      final user = await repo.fetchUserProfile(
+        widget.token,
+      ); // ignore si absent
       setState(() => currentUserId = user?.id?.toString());
     } catch (_) {
       // pas bloquant si non dispo
@@ -161,7 +176,8 @@ class _DashboardHomeState extends State<_DashboardHome> {
   }
 
   bool _isMine(Map a) {
-    final created = a['createdById'] ??
+    final created =
+        a['createdById'] ??
         (a['createdBy'] is Map ? a['createdBy']['id'] : null) ??
         a['creatorId'] ??
         a['userId'];
@@ -191,10 +207,17 @@ class _DashboardHomeState extends State<_DashboardHome> {
       if (resp.statusCode == 200) {
         final decoded = jsonDecode(resp.body);
         final data = decoded['data'] ?? decoded;
-        final newAccess = (data is Map) ? (data['accessToken'] ?? data['access_token']) : null;
-        final newRefresh = (data is Map) ? (data['refreshToken'] ?? data['refresh_token']) : null;
+        final newAccess = (data is Map)
+            ? (data['accessToken'] ?? data['access_token'])
+            : null;
+        final newRefresh = (data is Map)
+            ? (data['refreshToken'] ?? data['refresh_token'])
+            : null;
         if (newAccess is String && newAccess.isNotEmpty) {
-          await UserLocalService().saveTokens(newAccess, newRefresh is String ? newRefresh : refresh);
+          await UserLocalService().saveTokens(
+            newAccess,
+            newRefresh is String ? newRefresh : refresh,
+          );
           return newAccess;
         }
       }
@@ -222,6 +245,7 @@ class _DashboardHomeState extends State<_DashboardHome> {
             final decoded = jsonDecode(cached) as List<dynamic>;
             setState(() {
               alerts = decoded;
+              totalAlertsCount = decoded.length;
               loading = false;
             });
             return;
@@ -236,7 +260,10 @@ class _DashboardHomeState extends State<_DashboardHome> {
       }
 
       final url = Uri.parse("http://197.239.116.77:3000/api/v1/alerts");
-      Map<String, String> headers() => {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'};
+      Map<String, String> headers() => {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
       var resp = await http.get(url, headers: headers());
 
       if (resp.statusCode == 401) {
@@ -275,15 +302,26 @@ class _DashboardHomeState extends State<_DashboardHome> {
 
       final decoded = jsonDecode(resp.body);
       List<dynamic> items = [];
+      int? totalFromResponse;
       if (decoded is List) {
         items = decoded;
       } else if (decoded is Map) {
+        if (decoded['total'] != null) {
+          totalFromResponse = int.tryParse(decoded['total'].toString());
+        }
         if (decoded['data'] is List) {
           items = List<dynamic>.from(decoded['data']);
-        } else if (decoded['alerts'] is List) items = List<dynamic>.from(decoded['alerts']);
-        else if (decoded['data'] is Map && decoded['data']['items'] is List) items = List<dynamic>.from(decoded['data']['items']);
-        else if (decoded['data'] is Map && decoded['data']['items'] == null && decoded['data'].containsKey('total')) {
-          items = decoded['data']['items'] is List ? List<dynamic>.from(decoded['data']['items']) : [];
+        } else if (decoded['alerts'] is List) {
+          items = List<dynamic>.from(decoded['alerts']);
+        } else if (decoded['data'] is Map && decoded['data']['items'] is List) {
+          items = List<dynamic>.from(decoded['data']['items']);
+        } else if (decoded['data'] is Map) {
+          final data = decoded['data'] as Map;
+          if (data['total'] != null) {
+            totalFromResponse = int.tryParse(data['total'].toString());
+          } else if (data['count'] != null) {
+            totalFromResponse = int.tryParse(data['count'].toString());
+          }
         }
       }
 
@@ -297,6 +335,7 @@ class _DashboardHomeState extends State<_DashboardHome> {
 
       setState(() {
         alerts = items;
+        totalAlertsCount = totalFromResponse ?? items.length;
         loading = false;
       });
     } catch (e) {
@@ -307,6 +346,7 @@ class _DashboardHomeState extends State<_DashboardHome> {
           final decoded = jsonDecode(cached) as List<dynamic>;
           setState(() {
             alerts = decoded;
+            totalAlertsCount = decoded.length;
             loading = false;
             error = null;
           });
@@ -325,16 +365,16 @@ class _DashboardHomeState extends State<_DashboardHome> {
   Future<void> _checkForNewAlerts(List<dynamic> newAlerts) async {
     for (var alert in newAlerts) {
       final alertId = (alert['id'] ?? alert['_id'] ?? '').toString();
-      
+
       if (alertId.isEmpty) continue;
-      
+
       // Si c'est une nouvelle alerte (pas dans la liste précédente)
       if (!_previousAlertIds.contains(alertId)) {
         await _showNotificationForAlert(alert);
         _previousAlertIds.add(alertId);
       }
     }
-    
+
     // Sauvegarder les IDs mis à jour
     await _savePreviousAlertIds();
   }
@@ -342,13 +382,14 @@ class _DashboardHomeState extends State<_DashboardHome> {
   /// Affiche une notification locale pour une nouvelle alerte
   Future<void> _showNotificationForAlert(dynamic alert) async {
     final title = (alert['title'] ?? 'Nouvelle Alerte').toString();
-    final message = (alert['message'] ?? 'Une nouvelle alerte a été détectée').toString();
+    final message = (alert['message'] ?? 'Une nouvelle alerte a été détectée')
+        .toString();
     final severity = (alert['severity'] ?? '').toString().toUpperCase();
-    
+
     // Déterminer la priorité selon la sévérité
     Importance importance = Importance.defaultImportance;
     Priority priority = Priority.defaultPriority;
-    
+
     if (severity == 'HIGH' || severity == 'CRITICAL' || severity == 'EXTREME') {
       importance = Importance.high;
       priority = Priority.high;
@@ -388,15 +429,16 @@ class _DashboardHomeState extends State<_DashboardHome> {
     }).length;
   }
 
+  String _statusOf(dynamic alert) {
+    return (alert?['status'] ?? alert?['state'] ?? '').toString().toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final totalCount = alerts.length;
-    final pendingCount = _countForStatuses(['PENDING', 'WAITING', 'ON_HOLD', 'IN_PROGRESS']);
-    final activeCount = _countForStatuses(['ACTIVE']);
-    final sentByMeCount = alerts.where((a) {
-      final s = (a?['status'] ?? a?['state'] ?? '').toString().toUpperCase();
-      return _isMine(a) && (s == 'SENT' || s == 'TRANSMITTED');
-    }).length;
+    final totalCount = totalAlertsCount ?? alerts.length;
+    final pendingCount = _countForStatuses(['DRAFT']);
+    final activeCount = alerts.where((a) => _statusOf(a) != 'ARCHIVED').length;
+    final sentCount = _countForStatuses(['SENT', 'TRANSMITTED']);
 
     return Scaffold(
       appBar: AppBar(
@@ -408,17 +450,12 @@ class _DashboardHomeState extends State<_DashboardHome> {
           children: const [
             Text(
               "Point Focal Communal",
-              style: TextStyle(
-                color: Colors.green,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.green, fontSize: 14),
             ),
           ],
-
         ),
-         
         actions: [
-          const NotificationBell(),   // push notification
+          const NotificationBell(), // push notification
           // Bouton de synchronisation avec badge
           if (pendingAlertsCount > 0)
             Stack(
@@ -468,7 +505,7 @@ class _DashboardHomeState extends State<_DashboardHome> {
               await _loadPendingAlertsCount();
             },
             icon: const Icon(Icons.refresh, color: Colors.black),
-          )
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -476,94 +513,111 @@ class _DashboardHomeState extends State<_DashboardHome> {
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              StatCard(title: "Total alertes", value: totalCount.toString()),
-              StatCard(title: "En attente", value: pendingCount.toString()),
-              StatCard(title: "Actives", value: activeCount.toString()),
-              StatCard(title: "Envoyées", value: sentByMeCount.toString()),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    //builder: (context) => NewAlertStep1Page(alert: AlertModel()),
-                    builder: (context) => CreateAlertPage(),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  StatCard(
+                    title: "Total alertes",
+                    value: totalCount.toString(),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  StatCard(title: "En attente", value: pendingCount.toString()),
+                  StatCard(title: "Actives", value: activeCount.toString()),
+                  StatCard(title: "Envoyées", value: sentCount.toString()),
+                ],
               ),
-              child: const Text(
-                "Créer une alerte",
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        //builder: (context) => NewAlertStep1Page(alert: AlertModel()),
+                        builder: (context) => CreateAlertPage(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    "Créer une alerte",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 25),
+              const Text(
+                "Dernières alertes",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
-          ),
-          const SizedBox(height: 25),
-          const Text(
-            "Dernières alertes",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          if (error != null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Text(error!, style: const TextStyle(color: Colors.red)),
-            )
-          else if (alerts.isEmpty && !loading)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text("Aucune alerte trouvée"),
-            )
-          else if (loading)
-            const Center(child: CircularProgressIndicator())
-          else
-            ...alerts.take(10).map((a) {
-              final id = (a['id'] ?? a['_id'] ?? '').toString();
-              final title = (a['title'] ?? 'Alerte SAP').toString();
-              final message = (a['message'] ?? '').toString();
-              final type = (a['type'] ?? '').toString();
-              final zone = (a['zoneName'] ?? (a['zone'] is Map ? a['zone']['name'] : '') ?? '').toString();
-              final severity = (a['severity'] ?? '').toString();
-              final status = (a['status'] ?? a['state'] ?? '').toString();
-              final startDate = (a['startDate'] ?? a['createdAt'] ?? '').toString();
-              final affected = (a['affected'] ?? a['peopleAffected'] ?? '').toString();
+              const SizedBox(height: 10),
+              if (error != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(
+                    error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                )
+              else if (alerts.isEmpty && !loading)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text("Aucune alerte trouvée"),
+                )
+              else if (loading)
+                const Center(child: CircularProgressIndicator())
+              else
+                ...alerts.take(10).map((a) {
+                  final id = (a['id'] ?? a['_id'] ?? '').toString();
+                  final title = (a['title'] ?? 'Alerte SAP').toString();
+                  final message = (a['message'] ?? '').toString();
+                  final type = (a['type'] ?? '').toString();
+                  final zone =
+                      (a['zoneName'] ??
+                              (a['zone'] is Map ? a['zone']['name'] : '') ??
+                              '')
+                          .toString();
+                  final severity = (a['severity'] ?? '').toString();
+                  final status = (a['status'] ?? a['state'] ?? '').toString();
+                  final startDate = (a['startDate'] ?? a['createdAt'] ?? '')
+                      .toString();
+                  final affected = (a['affected'] ?? a['peopleAffected'] ?? '')
+                      .toString();
 
-              return AlertItem(
-                id: id,
-                title: title,
-                message: message,
-                type: type,
-                zone: zone,
-                severity: severity,
-                status: status,
-                startDate: startDate,
-                affected: affected,
-              );
-            }),
-        ]),
+                  return AlertItem(
+                    id: id,
+                    title: title,
+                    message: message,
+                    type: type,
+                    zone: zone,
+                    severity: severity,
+                    status: status,
+                    startDate: startDate,
+                    affected: affected,
+                  );
+                }),
+            ],
+          ),
         ),
       ),
     );
@@ -589,13 +643,16 @@ class StatCard extends StatelessWidget {
             color: Colors.grey.withOpacity(.15),
             blurRadius: 6,
             offset: const Offset(0, 2),
-          )
+          ),
         ],
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         children: [
-          Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 4),
           Text(title, style: const TextStyle(fontSize: 15)),
         ],
@@ -633,7 +690,6 @@ class AlertItem extends StatelessWidget {
     if (u == 'DRAFT') return Colors.grey.shade100;
     if (u == 'PENDING') return Colors.yellow.shade100;
     if (u == 'APPROVED') return Colors.green.shade100;
-    if (u == 'REJECTED') return Colors.red.shade100;
     if (u == 'SENT') return Colors.blue.shade100;
     if (u == 'ACTIVE') return Colors.purple.shade100;
     if (u == 'CANCELLED') return Colors.orange.shade100;
@@ -658,7 +714,8 @@ class AlertItem extends StatelessWidget {
     final u = s.toUpperCase();
     if (u == 'LOW' || u == 'INFO') return Colors.yellow.shade100;
     if (u == 'MEDIUM' || u == 'MODERATE') return Colors.orange.shade100;
-    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME') return Colors.red.shade100;
+    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME')
+      return Colors.red.shade100;
     return Colors.grey.shade100;
   }
 
@@ -666,7 +723,8 @@ class AlertItem extends StatelessWidget {
     final u = s.toUpperCase();
     if (u == 'LOW' || u == 'INFO') return Colors.yellow.shade700;
     if (u == 'MEDIUM' || u == 'MODERATE') return Colors.orange.shade700;
-    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME') return Colors.red.shade700;
+    if (u == 'HIGH' || u == 'CRITICAL' || u == 'EXTREME')
+      return Colors.red.shade700;
     return Colors.grey.shade700;
   }
 
@@ -722,8 +780,14 @@ class AlertItem extends StatelessWidget {
   Widget _badge(String text, Color bg, Color fg) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-      child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 11)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 11),
+      ),
     );
   }
 
@@ -756,7 +820,11 @@ class AlertItem extends StatelessWidget {
                       color: Colors.orange.shade50,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -765,7 +833,11 @@ class AlertItem extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -773,7 +845,10 @@ class AlertItem extends StatelessWidget {
                         if (message.isNotEmpty)
                           Text(
                             message,
-                            style: const TextStyle(fontSize: 13, color: Colors.grey),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -787,8 +862,17 @@ class AlertItem extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  _badge(_statusLabel(status), _statusBg(status), _statusFg(status)),
-                  if (severity.isNotEmpty) _badge(_severityLabel(severity), _severityBg(severity), _severityFg(severity)),
+                  _badge(
+                    _statusLabel(status),
+                    _statusBg(status),
+                    _statusFg(status),
+                  ),
+                  if (severity.isNotEmpty)
+                    _badge(
+                      _severityLabel(severity),
+                      _severityBg(severity),
+                      _severityFg(severity),
+                    ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -808,14 +892,24 @@ class AlertItem extends StatelessWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+                  const Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(width: 4),
-                  Text(_formatDate(startDate), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    _formatDate(startDate),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                   if (type.isNotEmpty) ...[
                     const SizedBox(width: 16),
                     const Icon(Icons.category, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(_typeLabel(type), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      _typeLabel(type),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ],
                 ],
               ),
@@ -825,13 +919,16 @@ class AlertItem extends StatelessWidget {
                   children: [
                     const Icon(Icons.people, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text("$affected personnes affectées", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      "$affected personnes affectées",
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ],
                 ),
               ],
             ],
-           ),
-         ),
+          ),
+        ),
       ),
     );
   }
